@@ -1,0 +1,105 @@
+CTranslate2 CPU - Ryzen 5 5600X - 101 lines from Translator++ (non-cached, model preloaded, beam_size=5)
+intra/inter_threads=Request servicing time (total time, not just raw processing time)
+
+~40% CPU usage
+0/6=36.24s
+0/8=35.48s / 36.75s
+0/12=35.65s / 35.59s
+0/16=35.8s
+0/18=35.77s
+0/24=35.89s / 36.19s
+0/30=36.11s / 36.18s
+0/32=35.9s
+
+~50% CPU usage:
+6/6=33.1s / 33.86s
+6/8=33.25s
+6/12=33.54s
+6/16=33.32s
+6/24=33.58s
+6/30=33.32s
+6/32=33.35s
+
+100% CPU usage:
+12/6=38.43s / 38.87s
+12/8=38.8s / 48.19s /44.91s/ 41.84s /42.48s
+12/12=38.79s / 38.48s
+12/16=38.51s
+12/18=39.24s /38.48s
+12/24=38.74s
+12/30=37.67s
+12/32=37.98s
+
+Conclusion1: inter_threads does not matter for CPU load.
+Conclusion2: intra_threads = CPU threads.
+Conclusion3: Best CTranslate2 CPU performance is when intra_threads matches physical CPU core count.
+
+
+A few one-off tests (still run multiple times each).
+old fairseq 1.0.0a0 CPU on Python 3.9 ; single process (Default Sugoi v7)
+94.92s / 95.4s
+
+fully updated fairseq 0.2.2+latest commits CPU on Python 3.10 ; single process (Updated Sugoi)
+71.6s / 69.76s / 69.37 / 69.15s
+
+Ryzen 5 5600X + Nvidia RTX 3060 12 GB
+fully updated fairseq w/CUDA 11 on Python 3.10 ;  single process (Updated Sugoi + CUDA)
+11.54s / 9.44s / 9.46s / 9.47s
+
+
+fully updated CTranslate2 w/CUDA 11 on Python 3.10 ; single process
+intra/inter_threads=Request servicing time (total time, not just raw processing time)
+
+~38% CPU usage
+0/6=6.47s / 5.71s / 5.78s / 5.74s / 5.81s
+0/8=6.44s / 5.77s / 5.72s / 5.79s
+0/12=6.49s / 5.71s / 5.73s / 5.76s
+0/16=6.41s / 5.75s / 5.76s / 5.73s
+0/18=6.51s / 5.74s / 5.81s / 5.87s
+0/24=6.48s / 5.71s / 5.79s / 5.77s
+0/30=6.49s / 5.72s / 5.72s
+0/32=6.47s / 5.70s / 5.76s / 6.42s
+
+~50% CPU usage:
+6/6=6.58s / 5.82s / 5.85s / 5.93s
+6/8=6.62s / 5.87s / 5.95s / 5.93s
+6/12=6.61s / 5.87s / 5.85s / 5.95s
+6/16=6.58s / 5.82s / 5.96s / 5.89s
+6/24=7.08s / 5.94s / 5.92s / 6.03s / 6.04s
+6/30=6.61s / 5.82s / 5.88s / 5.99s
+6/32=6.8s / 6.11s / 6.18s / 6.1s / 6.62s / 5.82s / 5.92s
+6/128=6.59s / 5.84s / 5.92s
+
+100% CPU usage:
+12/6=7.75s / 6.82s / 7.08s
+12/8=7.76s / 6.75s / 6.98s / 6.73s
+12/12=7.46s / 6.61s / 7.06s
+12/16=7.32s / 6.62s / 7.17s
+12/18=7.76s / 6.96s / 6.82s
+12/24=7.84s / 6.58s / 6.8s
+12/30=7.8s / 6.9s / 6.67s
+12/32=7.82s / 6.84s / 6.87s / 6.92s / 6.93s
+
+Conclusion: CPU threads do not matter much when using CUDA unless overloading on CPU threads. In that case, the performance drops.
+
+
+CTranslate2 CPU - AMD FX 8320 - 101 lines from Translator++ (non-cached, model preloaded, beam_size=5)
+intra_threads=Request servicing time (total time, not just raw processing time)
+~55% CPU usage
+0=171s / 168.59s
+
+~55% CPU usage
+4=167.33s / 168.04s
+
+100% CPU usage
+8=129.09s / 130.08s
+
+100% CPU usage
+12=145.04s / 146.38s
+
+Conclusion: Best CTranslate2 CPU performance is when intra_threads matches physical CPU core count (8).
+
+
+fairseq Direct ML AMD FX 8320 + RX 560 4 GB - 101 lines from Translator++ (non-cached, model preloaded, beam_size=5)
+20-50% CPU usage
+119.21s / 119.65s / 118.86s / 118.54s / 118.15s /118.48s / 118.57s / 117.72s / 117.43s /117.51s / 119s / 119.28s
