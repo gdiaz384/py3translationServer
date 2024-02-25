@@ -39,6 +39,12 @@ py3translationServer is an HTTP fontend for [fairseq](//github.com/facebookresea
 - Support for additional model formats.
     - Currently only models with associated sentencepiece models for their vocabulary are supported.
     - This limitation is somewhat arbitrary, so please [open an issue](//github.com/gdiaz384/py3translationServer/issues/new) to request support for your model type if this limitation is harmful to your use case. Remember to specify a model type, the byte pair encoding type, and provide an example model for development purposes.
+    - Add OpenAI's [whisper model](//github.com/openai/whisper) format for Audio-to-Text. Interesting Links:
+        - https://github.com/Const-me/Whisper
+            - Whisper + DirectX 11 API.
+        - https://github.com/SYSTRAN/faster-whisper
+            - Whisper + CTranslate2
+        - https://github.com/Purfview/whisper-standalone-win
 - Support for additional acceleration modes for CTranslate2, especially cuDNN.
     - Update: CTranslate2 does not really expose its internals.
     - It just has a very barebones interface consisting of [3 device modes](https://opennmt.net/CTranslate2/python/ctranslate2.Translator.html): `cpu`, `cuda`, and `auto`.
@@ -680,8 +686,12 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - cuDNN 8 is used for CUDA 11.x.
     - Suggested by devs: Use an Nvidia GPU with tensor cores, i.e. [Compute Capability](//developer.nvidia.com/cuda-gpus) >= 7.0.
 - Links:
-    - https://pypi.org/project/ctranslate2
     - Project Page: https://github.com/OpenNMT/CTranslate2
+    - PyPi: https://pypi.org/project/ctranslate2
+    - Models: https://opennmt.net/Models-py/
+    - Tutorial: https://github.com/ymoslem/OpenNMT-Tutorial
+    - NMT training: https://github.com/ymoslem/OpenNMT-Tutorial/blob/main/2-NMT-Training.ipynb
+    - Multimodal NMT training: https://blog.machinetranslation.io/multilingual-nmt/
     - Documentation: https://opennmt.net/CTranslate2
     - More Docs: https://github.com/OpenNMT/CTranslate2/tree/master/docs
     - FAQ: https://opennmt.net/CTranslate2/faq.html
