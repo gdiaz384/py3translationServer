@@ -260,15 +260,17 @@ Latest Version: `0.4 beta - 2024Feb24`
 
 - PyTorch is not needed for CTranslate2 + CPU only workloads.
 - PyTorch is needed to support GPU acceleration in both fairseq and CTranslate2 and is a required dependency for fairseq.
-    - To install from last stable build, see their chart at [PyTorch.org](//pytorch.org)
+- PyTorch whisper... TODO: This section.
+- To install from last stable build: 
+    - See their chart at [PyTorch.org](//pytorch.org).
     - Select PyTorch Build, OS, pip, Python, and Compute Platform to select the command that will install the appropriate version of PyTorch.
+    - For GPU acceleration, be sure to install the correct version of PyTorch that is compatible with the local GPU. The installation chart has several PyTorch options available including some CPU only versions.
     - Previous versions: [pytorch.org/get-started/previous-versions](//pytorch.org/get-started/previous-versions)
 - Install from source:
     - https://github.com/pytorch/pytorch/wiki/Developer-Environment-Prerequisites
 - More information:
-    - For GPU acceleration, be sure to install the correct version of PyTorch that is compatible with the local GPU. The installation chart has several PyTorch options available including some CPU only versions.
-    - PyTorch v2.2.0 requires Python 3.8+.
     - The first version of PyTorch CUDA to support Python 3.12 on Windows is v2.2.0.
+    - PyTorch v2.2.0 requires Python 3.8+.
     - PyTorch v2.2.0 does not support FlashAttentionV2 on Windows #[108175](//github.com/pytorch/pytorch/issues/108175).
 
 ### As Needed: Install fairseq
@@ -309,7 +311,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 ### As Needed: Install CTranslate2
 
 - Install from last stable build:
-    - `pip install ctranslate2 OpenNMT-py==2.* sentencepiece`
+    - `pip install ctranslate2 sentencepiece`
 - Install from source:
     - https://opennmt.net/CTranslate2/installation.html#install-from-sources
 - More information:
@@ -320,7 +322,10 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 
 - Warnings:
     - Do not install this globally or alongside fairseq.
-    - This will trash the PyTorch installation fairseq uses because it requires special versions (1.08, 1.13, 2.0.0).
+    - This will trash the PyTorch installation because it requires special versions (1.08, 1.13, 2.0.0).
+    - It also seems to require a special version of fairseq.
+        - This version is available precompiled for Python 3.10 on the [static wheels](//github.com/gdiaz384/fairseq/releases) page.
+        - For Python 3.8 and 3.9, build from source using the commit listed on the static wheels page.
 - Install from unstable build at your own risk:
     - Refer to Microsoft's [guide](//learn.microsoft.com/en-us/windows/ai/directml/gpu-pytorch-windows).
 - More information:
@@ -409,16 +414,20 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 
 ### Regarding the Streamlit Web UI
 
-- For convinence and testing, there is a small web UI included at `resources/webUI.py`.
+- For convenience and testing, there is a small web UI included at `resources/webUI.py`.
     - It was hastily written, but it honors line breaks at least.
 - The UI requires the `streamlit` library by [streamlit.io](//streamlit.io).
     - To install it: `pip install streamlit==1.31.1` or `pip install streamlit`
     - py3translationServer was tested with `streamlit==1.31.1` but other versions may work.
+- As per the hastily written part, it is a completely seperate process to py3translationServer, and so it must be started seperately.
 - To actually run the UI:
     - `streamlit run resources\webUI.py`
     - `streamlit run resources\webUI.py -- --address localhost`
     - `streamlit run resources\webUI.py -- --address localhost -port 14366`
-- The UI is a completely seperate process currently.
+- For convenience, there is an alias for the above code of `--uiPath` `-ui`. Example:
+- `python py3translationServer.py fairseq D:\myModel.pt -sl ja -tl en --uiPath resources\webUI.py`
+- If using the above alias, the psutil library is required to shut down `webUI.py`. Install with:
+    - `pip install psutil`
 
 ### Regarding the HTTP API:
 
@@ -432,9 +441,11 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - `content` must exist.
     - `message` is optional.
         - In the default Sugoi server, `message` set to `translate sentences` is required, so always include it for increased compatibility.
+    - Example: 
+        - `curl --header "Content-Type: application/json" -X POST -d "{ \"content\": \"は静かに前へと歩み出た。\", \"message\" : \"translate sentences\" }" http://localhost:14366`
 - For batch requests, use a single list. Wrap content's value in square brackets `[ ]` and fill it with unique sentences separated by commas.
     - `{ "content" : [ "は静かに前へと歩み出た。" , "【クロエ】" ] , "message" : "translate sentences" }`
-    - There is an example of code doing this in Python at `resources\webUI.py`.
+    - There is an example of Python code doing this at `resources/webUI.py`.
 - To shut down the server, send a POST request to root `/` as JSON:
     - `{ "content" : "は静かに前へと歩み出た。" , "message" : "close server" }`
     - `message` must exist and have the value of '`close server`'.
@@ -447,6 +458,8 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - Input must be escaped appropriately with backslash `\` for JSON. Example: 
         - `{ "content" : "\"The rose needed water,\" she said." , "message" : "translate sentences" }`
 - The functions above this line are more or less the default Sugoi Offline Translator v4.0 API . Below this is API functionality unique to py3translationServer.
+- The APIv1 is available at:
+    - `http://localhost:14366/api/v1/`
 - Support exists to print out the server version over HTTP by visiting the following URLs:
     - `http://localhost:14366/version`
     - `http://localhost:14366/api/v1/version`
@@ -455,8 +468,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - `http://localhost:14366/model`
     - `http://localhost:14366/api/v1/model`
     - GET is returned as `text/plain`. POST is returned as JSON. In the JSON, check the value of content.
-- Managing cache is available at:
-    - `http://localhost:14366/api/v1/`
+- Managing cache is available with:
     - `/saveCache` prompts the server to write out out the cache in memory to the disk.
         - The setting above still respects the `defaultSaveCacheInterval` read during runtime.
         - `defaultSaveCacheInterval` specifies the minimum number of seconds to wait before writing cache to disk.
@@ -548,7 +560,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
         - `fairseq-1.0.0a0-cp310-cp310-win_amd64.whl`
         - For other Python versions, build that commit from source.
     - Implementation details for CTranslate2 are unclear, so only fairseq is currently working. See: [#1615](//github.com/OpenNMT/CTranslate2/issues/1615).
-    - For additional bugs and limitations see: **DirectML Resources** .
+    - For additional bugs, limitations, and notice of included spyware, see: **DirectML Resources** .
 - [ROCm](//www.amd.com/en/products/software/rocm.html) for AMD GPU support on Linux, [5.4.3](//rocm.docs.amd.com/en/docs-5.4.3/release/gpu_os_support.html), [5.5.1](//rocm.docs.amd.com/en/docs-5.5.1/release/gpu_os_support.html), [5.6.0](//docs.amd.com/en/docs-5.6.0/release/gpu_os_support.html), [5.7.1](//docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html), [latest](//docs.amd.com/projects/radeon/en/latest/docs/compatibility.html), through [PyTorch](//pytorch.org) should be possible, but the number of GPUs compatible with that configuration are abysmally low and expensive which makes it hard to implement support for it.
     - While there are a few GPUs supported by ROCm on Windows, [5.5.1](//rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html), [5.6.0](//docs.amd.com/en/docs-5.6.0/release/windows_support.html), [5.7.1](https://docs.amd.com/en/docs-5.7.1/release/windows_support.html), there are no ROCm PyTorch builds that support Windows as of 2024 Feb. See: [PyTorch.org](//pytorch.org).
     - py3translationServer includes some error checking code but still allows `--device` `-dev` to be set to `rocm`. Since ROCm is not currently supported, fairseq will use CPU instead and CTranslate2 will crash.
@@ -565,9 +577,11 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - Processing models input/ouput is outside the scope of this project. The idea is solely to make the models available over HTTP and manage the engines.
     - TODO: Write template for proxy server to allow for manual parsing of I/O in Python3, and maybe Javascript.
     - Might have to dump all the code into functions so it can be imported cleanly. Alternative is to use invoke local shell scripts or just have a wrapper of some sort.
-- Currently, compatibility with various NMT model formats is abysmal, especially for fairseq. Multimodal models are not currently supported. [Open an issue](//github.com/gdiaz384/py3translationServer/issues/new) if this limitation negatively impacts your use case. Be sure to include a link to the model, or another one in the same format, so it can be tested during the development process.
+- Currently, compatibility with various NMT model formats is abysmal, especially for fairseq. [Open an issue](//github.com/gdiaz384/py3translationServer/issues/new) if this limitation negatively impacts your use case. Be sure to include a link to the model, or another one in the same format, so it can be tested during the development process.
+- Multimodal models are not currently supported. [Open an issue](//github.com/gdiaz384/py3translationServer/issues/new) if this limitation negatively impacts your use case. Be sure to include a link to the model, or another one in the same format, so it can be tested during the development process.
 - Currently, only models with accompanying sentencepiece models are supported. This limitation might be somewhat arbitrary. [Open an issue](//github.com/gdiaz384/py3translationServer/issues/new) if this limitation negatively impacts your use case or you can clairfy if some sort of BPE is required to run NMTs or not.
 - Changing models requires restarting the server.
+- Changing languages requires restarting the server.
 - [Open an issue](//github.com/gdiaz384/py3translationServer/issues/new) if any of these limitations are harmful to your use case.
 
 #### Program Limitations:
@@ -612,7 +626,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - If the application is told to close suddenly though the API while in the middle of processing, then it will typically wait for any subprocesses or thread to finish and close on its own before the application exits. This is the intended behavior for multiprocess and multithreaded applications. This is not a bug.
     - However, because fairseq + CPU will always hang after processing large batches, the sub processes will never finish and close.
     - Currently, identifying and closing these subprocesses for fairseq + CPU is done via the psutil library.
-    - Without this library, if using fairseq + CPU, there is no convinent cross-platform way to identify such zombie processes, therefore fairseq + CPU + multiprocessing when the psutil is not available is currently disabled.
+    - Without this library, if using fairseq + CPU, there is no convenient cross-platform way to identify such zombie processes, therefore fairseq + CPU + multiprocessing when the psutil is not available is currently disabled.
     - If this functionality is desired, then please install psutil.
         - `pip install psutil`
     - In other words, this fairseq + CPU bug is why `psutil` is in `resources\requirements.txt` instead of `resources\optional.txt`, because it enables the use of multiprocessing for this configuration which is a core feature.
@@ -797,7 +811,7 @@ pip install psutil
 pip install ctranslate2==3.24.0
 pip install fairseq # This will not work. Use one of the URL's in the install fairseq section instead.
 pip install streamlit #Optional. 
-pip install pywin32 #Optional, for Windows only.
+pip install pywin32 #Optional. This library is for Windows only.
 pip install pyinstaller
 pyinstaller --version   # To make sure it installed.
 cd py3translationServer   # Change to the folder that has py3translationServer.py
@@ -814,8 +828,8 @@ pyinstaller --onefile py3translationServer.py   # Omit --onefile to compile to a
 - Another Hint: https://pypi.org/project/cx-Freeze/
 - Update:
     - Both of the above were tested as not-working.
-    - There is way too much multiprocessing, multithreading, and async processing for any of the compiling software to make heads or tails of how to compile it.
-    - cx-Freeze also does not seem to support dynamic loading of Python libraries, meaning that it would always require PyTorch to be bundled which is highly unrealistic. There may be a workaround for this.
+    - There is way too much multiprocessing, multithreading, and async processing for any of the compiling software to understand how to compile it.
+    - cx-Freeze also does not seem to support dynamic loading of Python libraries, meaning that it would always require PyTorch to be bundled which is highly unrealistic. There may be a workaround for this as this seems like a really obvious flaw in the software.
     - In addition, there seems to be additional platform + language problems when trying to use the multiprocessing 'spawn' method with compiled code.
         - This will likely just never work, ever.
         - This is not a Windows limitation, even though Windows only supports 'spawn' and 'fork' exists as an alternative on all other platforms, because other software, like Firefox and Chrome, support multiprocessing on Windows as compiled code. Therefore, this is a Python language or library limitation.

@@ -400,7 +400,7 @@ def lazyHash(fileNameAndPath,myQueue):
     with open(inputModelFileNameAndPath,'rb') as myFile:
         myFileContents=myFile.read()
         #modelHash=str(hashlib.sha1(myFileContents).hexdigest())[:10]
-    myQueue.put(str(hashlib.sha1(myFileContents).hexdigest()))
+    myQueue.put( str( hashlib.sha1(myFileContents).hexdigest() ) )
 
     # CRC32
     # So, this returns a different crc32 than 7-Zip regardless of binascii/zlip or the 'bitwise and' fix.
@@ -453,6 +453,7 @@ def writeOutCache():
         print( ('Wrote cache to disk at: ' + cacheFilePathAndName).encode(consoleEncoding) )
     else:
         print( ('Warning: Error writing temporary cache file at:' + temporaryFileNameAndPath).encode(consoleEncoding) )
+
 
 #This turns translationCacheDictionary into a csv file at cacheFilePathAndName.
 def clearCache():
