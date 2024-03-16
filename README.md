@@ -350,29 +350,11 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - There are some internal variables near the top of the .py to configure defaults and the exact behavior of py3translationServer, fairseq, and CTranslate2. Change as desired.
 - Use two letter language codes, ISO 639-1, to specify languages.
     - [www.loc.gov/standards/iso639-2/php/code_list.php](//www.loc.gov/standards/iso639-2/php/code_list.php)
-- On the developer's tested system:
-    - Compared to fairseq CPU, CTranslate2 CPU showed significant improvement and better stability. For stability information, see: **Known Bugs and Limitations**.
-        - Translating 500 lines went from 948 seconds -> 141.8 seconds.
-    - Compared to fairseq CUDA 11, CTranslate2 CUDA 11 seemed to show no or minimal differences.
-        - Processing times were the same which suggests they might both be using the same underlying PyTorch CUDA 11.x library.
-        - In terms of GPU memory usage, fairseq CUDA would allocate memory and that allocation would stay flat.
-        - CTranslate2's CUDA memory usage would initially spike higher than fairseq but then decline over time.
-    - Update: A more comprehensive set of benchmarks were run after fully updating everything. The results are at `resources/ctranslate2.benchmarks.txt`.
-    - Summary:
-        - CTranslate2 inter_threads does not matter for CPU load.
-        - CTranslate2 intra_threads = CPU threads.
-        - Best CTranslate2 CPU performance is when intra_threads matches physical CPU core count.
-        - There is a slight performance uplift on fairseq CPU loads when updating fairseq and the related libraries to the latest versions compared to the archaic ones used in Sugoi Offline Translator v4.
-        - CUDA is amazing at speeding up workloads and worthwhile to take the time to get working.
-        - DirectML performance is abysmal, even compared to an old AMD FX 8320.
-        - Artifact: There seemed to be some rounding errors in the model used in CTranslate2 during the testing that caused the second half of large sentences to not return a result and also sometimes return odd <nul> characters instead of spaces. Using the same model with fairseq, not converted to CTranslate2 format, did not generate these errors but instead took a significant hit to performance, ~2x the processing time compared to CTranslate2.
-        - Troubleshooting: 
-            - The issue persisted even after setting `beam_search=10`. The fairseq default for beam_search is 5.
-            - CPU vs GPU inferencing was tested for fairseq and CTranslate2 and, it did not affect the issue.
 - The last known working versions for Python 3.7:
     - Note: This is just here for informational purposes. Python 3.7 is not officially supported. 
     - `tornado==6.2`
     - `sentencepiece=0.1.99`
+        - `sentencepiece=0.2.0`+ may work but has not been tested.
     - `ctranslate2==3.5.1`
         - Tested working using: `numpy-1.21.6` `pyyaml==5.3`
         - While there are newer versions on PyPi.org tagged as 3.7 compatible, but they do not import properly.
@@ -398,7 +380,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
         - Any existing older cache file will be replaced.
         - If any errors occur while reading the cache.csv file during startup or if it does not exist, a new one will be started but not written to disk while it is is still empty.
     - The logic handling writing cache to disk is currently very rudimentory since it is not completely clear how to handle the various error conditions regarding disk writes.
-    - Currently cache is, at most, only written to disk every `defaultMinimumClearCacheInterval` which defaults to 60 seconds.
+    - Currently cache is, at most, only written to disk every `defaultSaveCacheInterval` which defaults to 60 seconds.
         - This means that not all entries are guranteed to be written to disk especially when the program just started or when closing the program.
         - To write cache to disk manually, use the API. 'Use the API' means:
             - 1) Open a web browser.
@@ -412,6 +394,28 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
         - If shutting down the server via the API. 
     - Background: Tornado is an event-driven web server. If an event, does not occur, then nothing occurs. An example of an event is submiting a translation request or visting a URL on the socket. While this is very CPU friendly, this also means cache will not be written out unless something triggers it.
 
+### Regarding Performance
+
+- On the developer's tested system:
+    - Compared to fairseq CPU, CTranslate2 CPU showed significant improvement and better stability. For stability information, see: **Known Bugs and Limitations**.
+        - Translating 500 lines went from 948 seconds -> 141.8 seconds.
+    - Compared to fairseq CUDA 11, CTranslate2 CUDA 11 seemed to show no or minimal differences.
+        - Processing times were the same which suggests they might both be using the same underlying PyTorch CUDA 11.x library.
+        - In terms of GPU memory usage, fairseq CUDA would allocate memory and that allocation would stay flat.
+        - CTranslate2's CUDA memory usage would initially spike higher than fairseq but then decline over time.
+- Update: A more comprehensive set of benchmarks were run after fully updating everything. The results changed and are available at `resources/ctranslate2.benchmarks.txt`.
+    - Summary:
+    - CTranslate2 inter_threads does not matter for CPU load.
+    - CTranslate2 intra_threads = CPU threads.
+    - Best CTranslate2 CPU performance is when intra_threads matches physical CPU core count.
+    - There is a slight performance uplift on fairseq CPU loads when updating fairseq and the related libraries to the latest versions compared to the archaic ones used in Sugoi Offline Translator v4.
+    - CUDA is amazing at speeding up workloads and worthwhile to take the time to get working.
+    - DirectML performance is abysmal, even compared to an old AMD FX 8320.
+    - Artifact: There seemed to be some rounding errors in the model used in CTranslate2 during the testing that caused the second half of large sentences to not return a result and also sometimes return odd <nul> characters instead of spaces. Using the same model with fairseq, not converted to CTranslate2 format, did not generate these errors but instead took a significant hit to performance, ~2x the processing time compared to CTranslate2.
+    - Troubleshooting:
+        - The issue persisted even after setting `beam_search=10`. The fairseq default for beam_search is 5.
+        - CPU vs GPU inferencing was tested for fairseq and CTranslate2 and, it did not affect the issue.
+
 ### Regarding the Streamlit Web UI
 
 - For convenience and testing, there is a small web UI included at `resources/webUI.py`.
@@ -423,7 +427,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - To actually run the UI:
     - `streamlit run resources\webUI.py`
     - `streamlit run resources\webUI.py -- --address localhost`
-    - `streamlit run resources\webUI.py -- --address localhost -port 14366`
+    - `streamlit run resources\webUI.py -- --address localhost --port 14366`
 - For convenience, there is an alias for the above code of `--uiPath` `-ui`. Example:
 - `python py3translationServer.py fairseq D:\myModel.pt -sl ja -tl en --uiPath resources\webUI.py`
 - If using the above alias, the psutil library is required to shut down `webUI.py`. Install with:
@@ -431,7 +435,8 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 
 ### Regarding the HTTP API:
 
-- The HTTP API is currently unstable and rudimentary, but here is what it looks like right now.
+- The API should probably be updated to support some sort of widely used standard.
+- The current HTTP API is unstable and rudimentary, but here is what it looks like right now.
 - The address the server is available at is printed to standard output during startup.
 - Use UTF-8 for character encoding.
 - The path section of the URL is case sensitive.
@@ -657,6 +662,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - This is overtly required for fairseq + CPU + multiprocessing. If this is not available, the model will always be preloaded instead.
     - Install with: `pip install psutil`
     - psutil is also currently needed when launching the UI via the included convinence function to terminate it when closing py3translationServer.
+        - Launching the UI when psutil is not available should probably be disabled at some point. Until then, a zombie process is left on the system if the UI is launched without psutil to close it. Close it manually after shutting down py3translationServer. One way of accomplishing this is to launch py3translationServer using a shell script wrapper to have the shell process close the UI subprocess upon exiting.
 - Usage with fairseq requires fairseq. See: **As Needed: Install fairseq** and **fairseq Resources**.
 - Usage with CTranslate2 requires CTranslate2. See: **As Needed: Install CTranslate2** and **CTranslate2 Resources**.
 - Usage with the Streamlit UI requires Streamlit. See: **Regarding the Streamlit Web UI**.
@@ -674,7 +680,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
     - For Python 3.12, sentencepiece `0.2.0`+ is needed, but `0.1.99` has also been tested working as far back as Python 3.7.
     - `ctranslate2==4.0.0` CPU and `ctranslate2==3.24.0` CUDA 11 was tested working, but `ctranslate2==4.0.0` CUDA 12 was not tested.
         -  Hint: Since CTranslate2 uses [PyTorch](//pytorch.org) for its CUDA implementation, install PyTorch for CUDA 12.1 for CTranslate2 v4.0.0+.
-    - The fairseq version linked above for Python 3.7 does install and import successfully, but crashes when actually run. ctanslate2==3.0.5 works normally however.
+    - The fairseq version linked above for Python 3.7 does install and import successfully, but crashes when actually run. `ctanslate2==3.5.1` works normally however.
         - Neither of these configurations are officially supported.
 
 ### Tornado Resources:
