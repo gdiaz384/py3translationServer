@@ -105,29 +105,29 @@ with streamlit.form('mainTranslationForm'):
             print('translationJSON='+translationJSON)
 
         # Translate.
-        translationList=None
+        translatedList=None
         # Basically, this uses the requests library to send an HTTP POST request to hostAddressFull
         # The data this sends is translationJSON.
         # When it returns, it takes the result and uses the .json() method to get the actual data from the response.body. The result can return either a list or a string depending upon input, but since it was input as a list, the result will always be a list.
-        #translationList = requests.post( hostAddressFull, json = dict([ ('content' , str(user_input) ), ('message' , 'translate sentences') ]) ).json()
-        translationList = requests.post( hostAddressFull, json = translationJSON ).json()
+        #translatedList = requests.post( hostAddressFull, json = dict([ ('content' , str(user_input) ), ('message' , 'translate sentences') ]) ).json()
+        translatedList = requests.post( hostAddressFull, json = translationJSON ).json()
 
-        if ( submitted ) and ( translationList != None ):
+        if ( submitted ) and ( translatedList != None ):
             if ( __name__ == '__main__' ) and ( quiet != True ):
-                print(str(translationList))
+                print(str(translatedList))
             streamlit.write('Translation Result')
-            #streamlit.info(translationList)
+            #streamlit.info(translatedList)
 
             displayText = ''
-            for entry in translationList:
-                displayText=displayText + '\n' + entry
+            for entry in translatedList:
+                displayText=displayText + '\n' + str(entry)
             streamlit.code(displayText, language=None)
 
             #The following are prettier but they do not respect new lines.
             #streamlit.info(entry)
             #streamlit.write streamlit.code streamlit.success
-            #streamlit.code(translationList)
-            #streamlit.success(translationList)
+            #streamlit.code(translatedList)
+            #streamlit.success(translatedList)
 
 
 #Enable word wrap in streamlit's Markdown code blocks.

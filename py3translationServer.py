@@ -1024,23 +1024,30 @@ class MainHandler(tornado.web.RequestHandler):
         # Deal with cache.
         translateMe=[]
         # The syntax of this is:  tempRequestDictionary['rawEntry']=[thisValueIsFromCache,translatedData]
-        tempRequestDictionary={}
+        #tempRequestDictionary={}
+        tempRequestList=[]
         global timeCacheWasLastWritten
 
         if (cacheEnabled == True) and (len(translationCacheDictionary) != 0):
             # Dump rawInput into a dictionary that incorporates cache.
-            #create tempRequestDictionary['rawEntry']=[thisValueIsFromCache,translatedData]
+            # Bug: Using a dictionary creates a subtle bug where if a particular translation request has multiple duplicate items, those items will be de-duplicated.
+            # That is problematic because then the len(input) will no longer match len(output). Therefore, use a python List instead to allow duplicates.
+            # This does mean that duplicates will be submitted to the translation engine, but with cache enabled, this will only happen the first time.
+            #create tempRequestDictionary[ 'rawEntry' ]=[ thisValueIsFromCache, translatedData ]
+            #create tempRequestList.append( [ 'rawEntry', thisValueIsFromCache, translatedData ] )
             # Take every list entry from rawInput
             for i in rawInput:
                 # if entryInList/translatedData exists as a key in translationCacheDictionary,
                 if i in translationCacheDictionary.keys():
                     #then add entry/i to tempRequestDictionary with thisValueIsFromCache=True
-                    tempRequestDictionary[i]=[True,translationCacheDictionary[i]]
+                    #tempRequestDictionary[i]=[True,translationCacheDictionary[i]]
+                    tempRequestList.append( [ i, True, translationCacheDictionary[i] ] )
                 else:
                     # Otherwise, it needs to be processed.
                     # Create a list of all the values where thisValueIsFromCache == False. Maybe create this during parsing?
                     # Add it to the dictionary with thisValueIsFromCache=False
-                    tempRequestDictionary[i]=[False,i]
+                    #tempRequestDictionary[i]=[False,i]
+                    tempRequestList.append( [ i, False, i ] )
                     # Append it to the translateMe list.
                     translateMe.append(i)
 
@@ -1230,21 +1237,24 @@ class MainHandler(tornado.web.RequestHandler):
             # Alternatively, if the cache was just initalized and there were no entries in the cache before processing, then do not attempt to merge an empty cache with processed items.
             # The translations are stored in tempRequestDictionary as:
             # tempRequestDictionary['rawEntry']=[thisValueIsFromCache,translatedData]
+            # tempRequestList.append( [ 'rawEntry', thisValueIsFromCache, translatedData ] )
             if len(postTranslatedList) == 0:
-                for i in tempRequestDictionary.values():
-                    finalOutputList.append(i[1])
+                #for i in tempRequestDictionary.values():
+                for i in tempRequestList:
+                    finalOutputList.append(i[2])
             elif len(translationCacheDictionary) == 0:
                 finalOutputList=postTranslatedList
             else:
                 # Need to merge processed items with dictionary for final output.
                 # On return from processing, iterate over the tempRequestDictionary. For every entry.
-                for key, value in tempRequestDictionary.items():
-                    # if thisValueIsFromCache==True:
-                    if value[0] == True:
+                #for key, value in tempRequestDictionary.items():
+                for i in tempRequestList:
+                    # if thisValueIsFromCache == True:
+                    if i[1] == True:
                         # Then add to finalOutputList as-is and move to the next entry in the dictionary.
-                        finalOutputList.append( value[1] )
+                        finalOutputList.append( value[2] )
                     # if thisValueIsFromCache == False:
-                    elif value[0] == False:
+                    elif value[1] == False:
                         #Then obtain the value to add to finalOutputList from postTranslatedList, the list that has the translated values,
                         # and add that translated entry[counter] to the final output list
                         finalOutputList.append(postTranslatedList[counter])
