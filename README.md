@@ -63,6 +63,10 @@ py3translationServer is an HTTP fontend for [fairseq](//github.com/facebookresea
 
 ## Maybe:
 
+- Add everything here: [//github.com/xhluca/dl-translate](//github.com/xhluca/dl-translate)
+    - https://huggingface.co/transformers/master/model_doc/mbart.html
+    - https://huggingface.co/transformers/model_doc/m2m_100.html
+    - https://huggingface.co/docs/transformers/model_doc/nllb
 - Reduce JSON dependency for I/O.
     - Alternatives?
 - Support for [Textractor](//github.com/Artikash/Textractor).
@@ -454,8 +458,8 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - To shut down the server, send a POST request to root `/` as JSON:
     - `{ "content" : "は静かに前へと歩み出た。" , "message" : "close server" }`
     - `message` must exist and have the value of '`close server`'.
-    - `content` is optional. In other words:
-    - `{ "message" : "close server" }` Also works.
+    - `content` is optional. In other words, the following also works:
+        - `{ "message" : "close server" }`
     - Example:
     - `curl --header "Content-Type: application/json" -X POST -d "{\"message\":\"close server\" }" http://localhost:14366`
 - For the above inputs:
@@ -468,11 +472,11 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
 - Support exists to print out the server version over HTTP by visiting the following URLs:
     - `http://localhost:14366/version`
     - `http://localhost:14366/api/v1/version`
-    - GET is returned as `text/plain`. POST is returned as JSON. In the JSON, check the value of content.
+    - GET is returned as `text/plain`. POST is returned as JSON. In the JSON, check the value of `content`.
 - Support exists to print out the model information currently in use by visiting the following URLs:
     - `http://localhost:14366/model`
     - `http://localhost:14366/api/v1/model`
-    - GET is returned as `text/plain`. POST is returned as JSON. In the JSON, check the value of content.
+    - GET is returned as `text/plain`. POST is returned as JSON. In the JSON, check the value of `content`.
 - Managing cache is available with:
     - `/saveCache` prompts the server to write out out the cache in memory to the disk.
         - The setting above still respects the `defaultSaveCacheInterval` read during runtime.
@@ -490,7 +494,7 @@ pip install https://github.com/gdiaz384/fairseq/releases/download/v0.12.2.2024Fe
         - Check the value of `content` for the rawText and translated pairs. 
     - Since empty cache.csv files are not written to disk by default, there are some obscure bugs related to `/getCache` when trying to fetch it without first creating it.
         - cache.csv can be created with `/saveCache` or a translation event after `defaultSaveCacheInterval` has passed.
-        - One way never trigger these errors is to invoke `/saveCache`, wait a few seconds, and then `/getCache` to sure cache.csv actually exists before attempting to fetch it.
+        - One way to never trigger these errors is to invoke `/saveCache`, wait a few seconds, and then `/getCache` to sure cache.csv actually exists before attempting to fetch it.
         - Examples of improper usage:
             - Load a new model and immediately invoke `/getCache` before triggering any translation events.
             - Save as above, but not waiting until after at least one `defaultSaveCacheInterval` has passed to trigger a translation event or `/saveCache` before invoking `/getCache`.
@@ -839,10 +843,11 @@ pyinstaller --onefile py3translationServer.py   # Omit --onefile to compile to a
     - In addition, there seems to be additional platform + language problems when trying to use the multiprocessing 'spawn' method with compiled code.
         - This will likely just never work, ever.
         - This is not a Windows limitation, even though Windows only supports 'spawn' and 'fork' exists as an alternative on all other platforms, because other software, like Firefox and Chrome, support multiprocessing on Windows as compiled code. Therefore, this is a Python language or library limitation.
-        - This is due to limitations on how Python 'spawn' method just does does not work after freezing. Freezing did not even work for just calculating the hash of the model. Freezing may work for trite code in unix box somewhere, but real-world cross-platform code... no. Adding async on top of that means this will likely just never work, ever.
+        - This is due to limitations on how Python 'spawn' method just does not work after freezing. Freezing did not even work for just calculating the hash of the model. Freezing may work for trite code in unix box somewhere, but real-world cross-platform code... no. Adding async on top of that means this will likely just never work, ever.
         - Also note: The default 'spawn' method was chosen deliberately. The 'fork' method available on other platforms may work sometimes, but the [documentation](//docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods) states that it is known to cause corruption, at least on OSX, so the default spawn method was changed to 'spawn'. In other words, 'fork' on other platforms is not an automatic perfect fit either.
         - A different language than Python is probably preferred for compiled async multiprocess computing since this seems like an insurmountable language limitation, especially on Windows/OSX.
         - Or alternatively, perhaps a different library than concurrent futures exists that supports async multiprocessing + compiling? Likely, this would have to be imported from a different language.
+        - That is likely how KoboldCPP does it, but this has not been investigated yet.
 
 ## Licenses:
 
