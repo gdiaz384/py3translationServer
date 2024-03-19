@@ -30,7 +30,7 @@ License: AGPLv3, https://www.gnu.org/licenses/agpl-3.0.html
 #if ( __name__ == '__main__' ):
 #    multiprocessing.freeze_support()  # Does not work.
 
-__version__ = '0.4 beta - 2024Feb24' #This should probably be __version__ by convention. 'version' by itself is wrong since there is a conflicting '--version' CLI option that must not be changed because then it would change the UI of the CLI. #Update. Changed it.
+__version__ = '0.4 beta - 2024Mar18' #This should probably be __version__ by convention. 'version' by itself is wrong since there is a conflicting '--version' CLI option that must not be changed because then it would change the UI of the CLI. #Update. Changed it.
 
 
 # Set global defaults:
@@ -1039,7 +1039,7 @@ class MainHandler(tornado.web.RequestHandler):
             for i in rawInput:
                 # if entryInList/translatedData exists as a key in translationCacheDictionary,
                 if i in translationCacheDictionary.keys():
-                    #then add entry/i to tempRequestDictionary with thisValueIsFromCache=True
+                    # then add entry/i to tempRequestDictionary with thisValueIsFromCache=True
                     #tempRequestDictionary[i]=[True,translationCacheDictionary[i]]
                     tempRequestList.append( [ i, True, translationCacheDictionary[i] ] )
                 else:
@@ -1252,9 +1252,9 @@ class MainHandler(tornado.web.RequestHandler):
                     # if thisValueIsFromCache == True:
                     if i[1] == True:
                         # Then add to finalOutputList as-is and move to the next entry in the dictionary.
-                        finalOutputList.append( value[2] )
+                        finalOutputList.append( i[2] )
                     # if thisValueIsFromCache == False:
-                    elif value[1] == False:
+                    elif i[1] == False:
                         #Then obtain the value to add to finalOutputList from postTranslatedList, the list that has the translated values,
                         # and add that translated entry[counter] to the final output list
                         finalOutputList.append(postTranslatedList[counter])

@@ -155,7 +155,7 @@ modelPath | Required. | The path to the model to use with the chosen engine. For
 
 ## Download and Install Guide:
 
-Latest Version: `0.4 beta - 2024Feb24`
+Latest Version: `0.4 beta - 2024Mar18`
 
 `beta` means core functionality has been implemented and basic testing has been performed, but there many be occasional bugs.
 

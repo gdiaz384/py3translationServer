@@ -111,6 +111,7 @@ with streamlit.form('mainTranslationForm'):
         # When it returns, it takes the result and uses the .json() method to get the actual data from the response.body. The result can return either a list or a string depending upon input, but since it was input as a list, the result will always be a list.
         #translatedList = requests.post( hostAddressFull, json = dict([ ('content' , str(user_input) ), ('message' , 'translate sentences') ]) ).json()
         translatedList = requests.post( hostAddressFull, json = translationJSON ).json()
+        #translatedList = requests.post( hostAddressFull, json = translationJSON ).text
 
         if ( submitted ) and ( translatedList != None ):
             if ( __name__ == '__main__' ) and ( quiet != True ):
