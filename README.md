@@ -791,7 +791,7 @@ ct2-fairseq-converter --model_path "D:\pretrainedModel\big.pretrain.pt" --data_d
 - OpenNMT's [server.py](//github.com/OpenNMT/OpenNMT-py/blob/master/onmt/bin/server.py). [Usage guide](//forum.opennmt.net/t/simple-opennmt-py-rest-server/1392).
 - reAlpha39's [flask rest server](//github.com/reAlpha39/fairseq-translate-server/blob/main/rest_server.py).
 - https://git.sr.ht/~asdf/sugee/tree/main/item/sugee/server.py
-- Dreamsavior's [yojet](https://dreamsavior.net/docs/yojet/). Windows only, commercial, closed source, and requires purchasing Translator++.
+- Dreamsavior's [yojet](https://dreamsavior.net/docs/yojet/). Newer versions are Windows only, commercial, closed source, and require purchasing Translator++. There is this [older version](//github.com/dreamsavior/yojet-server) that has not been updated in 2+ years as well.
 - There is also a small flask implementation included in Sugoi Toolkit, [mirror](//github.com/cbc02009/vno-local-cpu/blob/main/flaskServer.py).
 
 ## Compile (.exe) Guide:

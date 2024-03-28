@@ -511,7 +511,7 @@ if ( __name__ == '__main__' ) and ( cacheEnabled == True ):
                 csvReader = csv.reader(myFileHandle, strict=True)
                 currentLine=0
                 for line in csvReader:
-                    #skip first line
+                    # Skip first line.
                     if currentLine == 0:
                         currentLine+=1
                     elif currentLine != 0:
@@ -522,7 +522,7 @@ if ( __name__ == '__main__' ) and ( cacheEnabled == True ):
                             line[1] = None
                         translationCacheDictionary[line[0]]=line[1]
         except:
-            print( ('Warning: Reinitalizing cache due to error reading input cache.csv: '+cacheFilePathAndName).encode(consoleEncoding) )
+            print( ('Warning: Reinitalizing cache due to error reading input cache.csv: ' + cacheFilePathAndName).encode(consoleEncoding) )
             translationCacheDictionary={}
 
         if debug == True:
