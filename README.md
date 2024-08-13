@@ -847,7 +847,7 @@ pyinstaller --onefile py3translationServer.py   # Omit --onefile to compile to a
         - Also note: The default 'spawn' method was chosen deliberately. The 'fork' method available on other platforms may work sometimes, but the [documentation](//docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods) states that it is known to cause corruption, at least on OSX, so the default spawn method was changed to 'spawn'. In other words, 'fork' on other platforms is not an automatic perfect fit either.
         - A different language than Python is probably preferred for compiled async multiprocess computing since this seems like an insurmountable language limitation, especially on Windows/OSX.
         - Or alternatively, perhaps a different library than concurrent futures exists that supports async multiprocessing + compiling? Likely, this would have to be imported from a different language.
-        - That is likely how KoboldCPP does it, but this has not been investigated yet.
+        - That is likely how KoboldCpp does it, but this has not been investigated yet.
 
 ## Licenses:
 
