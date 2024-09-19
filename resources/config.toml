@@ -1,0 +1,10 @@
+#https://docs.streamlit.io/develop/api-reference/configuration/config.toml
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+fileWatcherType = "none"
+
+# https://discuss.streamlit.io/t/supress-new-browser-window-once-app-is-started-execution/2018/2
+# https://discuss.streamlit.io/t/oserror-errno-24-inotify-instance-limit-reached/5506/3
