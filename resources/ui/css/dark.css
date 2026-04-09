@@ -1,0 +1,17 @@
+html { 
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+a { color: rgb( 200, 200, 200 ); }
+input {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+textarea {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+select {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+button {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+

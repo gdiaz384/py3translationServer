@@ -1,2 +1,5 @@
+ctranslate2>=3.24.0
+transformers>=4.44.2
+huggingface_hub
 pywin32==306
-streamlit==1.31.1
+streamlit>=1.32.0

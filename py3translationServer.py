@@ -7,16 +7,18 @@ py3translationServer.py exposes fairseq and CTranslate2 models over HTTP using t
 - Tornado is a Python web framework and asynchronous networking library with an emphasis on non-blocking network I/O.
 - fairseq is library for machine learning and data modeling.
 - CTranslate2 is a C++ and Python library for efficient inference with transformer models, including those used by fairseq.
+- "Transformers is a library of pretrained natural language processing, computer vision, audio, and multimodal models for inference and training."
 - More information:
     - https://www.tornadoweb.org
     - https://github.com/facebookresearch/fairseq
     - https://opennmt.net/CTranslate2
+    - https://huggingface.co/docs/transformers/main/en/index
 
 Install with:
-- pip install tornado ctranslate2
+- pip install tornado ctranslate2 transformers
 - fairseq must be built from source since the 0.2.0 version available on PyPi is too old.
 
-py3translationServer.py:
+py3translationServer.py features:
 - Supports both CPU and GPU inferencing. 'GPU' is aliased to CUDA, but DirectML is also supported on Windows.
 - Supports large batch requests.
 - Supports both single process and multiprocess modes.
@@ -26,472 +28,340 @@ py3translationServer.py:
 Copyright: github/gdiaz384
 License: AGPLv3, https://www.gnu.org/licenses/agpl-3.0.html
 """
-#import multiprocessing
-#if ( __name__ == '__main__' ):
-#    multiprocessing.freeze_support()  # Does not work.
-
-__version__ = '0.4 beta - 2024Mar18' #This should probably be __version__ by convention. 'version' by itself is wrong since there is a conflicting '--version' CLI option that must not be changed because then it would change the UI of the CLI. #Update. Changed it.
+__version__ = '2025.06.06'
 
 
-# Set global defaults:
-defaultFileEncoding='utf-8'
-defaultConsoleEncoding='utf-8'
-#https://docs.python.org/3.8/library/codecs.html#error-handlers
-defaultInputFileErrorHandling='strict'
+def getDefaults():
+    # Set global defaults:
+    defaults = { }
+    defaults[ 'modelDatabase' ] = [ 'fairseq.sugoi', 'ctranslate2.sugoi', 'transformers.marianmt' ]
+    # The [ 'modelDatabase' ] list should be turned into a modelDatabase={ } dictionary where each key is a model name mapping to a value. Then, the value should be another dictionary that has these values.
+    # [ 'imported' ]=False, [ 'module' ]=importlib.import_module( 'fully.qualified.path.to.module' ), [ 'model' ]=[ 'module' ].Translator(), [ 'available' ]=False, [ 'hash' ]=None,
+#>>> string=[ 'fairseq-sugoi' ]
+#>>> sugoi_module = importlib.import_module('resources.engines.'+string[ 0 ].split( '-' )[ 0 ]+'.'+ string[ 0 ].split( '-' )[ 1 ])
+#>>> sugoi_module.Translator()
 
+    # Set main program defaults:
+    # Valid values: None, cpu, gpu, cuda, directml. gpu is aliased to cuda.
+    # ROCm support is not currently implemented. Entering 'rocm' will use fairseq in CPU mode and error out CTranslate2.
+    defaults[ 'device' ] = None
+    # Host address and port. 0.0.0.0 means 'bind to all local addresses'.
+    # localhost, 127.0.0.1, 0.0.0.0
+    defaults[ 'address' ] = 'localhost'  # localhost has an alias of 127.0.0.1
+    defaults[ 'port' ] = 14366
 
-# Set main program defaults:
-# Valid values: cpu, gpu, cuda, directml. gpu is aliased to cuda.
-# ROCm support is not currently implemented. Entering 'rocm' will use fairseq in CPU mode and error out CTranslate2.
-defaultDevice='cpu'
+    # Load a model into memory immediately. True, (False)
+    defaults[ 'preloadModel' ] = False
+    # If preloadModel is True, must be fairseq, ctranslate2, or transformers.
+    defaults[ 'engine' ] = None
+    # If preloadModel is True, this is the name of the model to preload.
+    defaults[ 'modelName' ] = None
+    # If preloadModel is True, the path to model.bin.
+    defaults[ 'modelPath' ] = None
+    # If preloadModel is True, the initial source and target languages. Different models use different language code formatting.
+    defaults[ 'sourceLanguage' ] = None
+    defaults[ 'targetLanguage' ] = None
 
-# Use two letter language codes: www.loc.gov/standards/iso639-2/php/code_list.php
-# Currently unused. Source and target languages must be specified at runtime.
-defaultSourceLanguage='ja'
-defaultTargetLanguage='en'
+    # Enable caching of translations. (True), False
+    defaults[ 'cacheEnabled' ] = True
+    # Set to False to overwrite cache.csv in-place without creating a copy. (True), False. Currently unused.
+    #defaults[ 'createBackupOfCacheFile' ] = True
+    # cachePath is normally used to store cache. Setting storeCacheInLocalEnvironment True changes the storage location of the cache to:
+        # Windows: os.getenv( 'LOCALAPPDATA' )/py3translationServer/cache
+        # Linux: str( pathlib.Path('~').expanduser() )+/.cache/py3translationServer/cache
+    defaults[ 'storeCacheInLocalEnvironment' ] = False
+    # Path to the folder that will be used to store cache. Can be relative to program.py/.exe or absolute. Only used if storeCacheInLocalEnvironment is False.
+    defaults[ 'cachePath' ] = 'resources/cache'
+    # The minimum number of seconds that must pass before the next request will trigger writing the cache to disk. Set to low value, like 1 to nearly always write out file.
+    # In some situations, writing the file may take several seconds. The lowest safe amount should be ~10 assuming a healthy disk and low to moderate active network i/o. Set to higher amounts to minimize disk i/o of mostly redundant data.
+    defaults[ 'saveCacheInterval' ] = 60
+    # The minumum time to wait in between allowing cache to be cleared meaning that cache cannot be cleared within this window of writing it out.
+    # Not implemented yet.
+    defaults[ 'clearCacheInterval' ] = 60
 
-# This is relative to inputModelOrFolder which must be specified at the command prompt.
-# Example sentence pieces: https://huggingface.co/JustFrederik
-defaultSentencePieceModelFolder0='spm'
-defaultSentencePieceModelFolder1='spmModel'
-defaultSentencePieceModelFolder2='spmModels'
-defaultSentencePieceModelPrefix='spm.'
-defaultSentencePieceModelPostfix='.nopretok.model'
-# If no sourceSentencePieceModel is specified, then use the defaultSentencePieceModelFolder0 together with defaultSourceLanguage to compute a value for sourceSentencePieceModel and check if it exists as a file. If it exists, use it. Example:
-#'spm.ja.nopretok.model'
-# If no targetSentencePieceModel is specified, then use the defaultSentencePieceModelFolder0 together with defaultTargetLanguage to compute a value for targetSentencePieceModel and check if it exists as a file. If it exists, use it. Example:
-#'spm.en.nopretok.model'
+    # Valid values are spawn, fork, and forkserver. Changing this will result in untested behavior.
+    # https://docs.python.org/3.12/library/multiprocessing.html#contexts-and-start-methods
+    defaults[ 'processesSpawnTechnique' ] = 'spawn'
+    # fairseq does not play well with multithreading or multiprocessing, so create a toggle to help troubleshooting.
+    defaults[ 'fairseqMultithreadingEnabled' ] = True
 
-defaultCTranslate2ModelName='model.bin'
+    defaults[ 'fileEncoding' ] = 'utf-8'
+    defaults[ 'consoleEncoding' ] = 'utf-8'
+    #https://docs.python.org/3.8/library/codecs.html#error-handlers
+    defaults[ 'inputFileErrorHandling' ] = 'strict'
+    if sys.version_info.minor >= 5
+        defaults[ 'outputFileErrorHandling' ] = 'namereplace'
+    else:
+        defaults[ 'outputFileErrorHandling' ] = 'backslashreplace'
 
-# Host address and port. 0.0.0.0 means 'bind to all local addresses'.
-#defaultAddress='0.0.0.0'
-defaultAddress='localhost'  # localhost has an alias of 127.0.0.1
-defaultPort=14366
-
-# The amount of time, in seconds, that must pass before the next request will trigger writing the cache to disk. Set to low value, like 1 to nearly always write out file.
-#  In some situations, writing the file may take several seconds. A safe minimum amount should be ~10 assuming a healthy disk and low to moderate active I/O.
-defaultSaveCacheInterval=60
-
-# The minumum time to wait in between allowing cache to be cleared meaning that cache cannot be cleared within this window of writing it out.
-# Not implemented yet.
-defaultMinimumClearCacheInterval=60
-
-# Valid values are True or False. Default=True. Set to False to overwrite cache.csv in-place without creating a copy. Not implemented yet.
-defaultCreateBackupOfCacheFile=True
-
-# This is relative to path of main script or the local environment. TODO: The path handling logic should be updated to not break if an absolute path is entered here.
-defaultCacheLocation='resources/cache'
-
-# defaultCacheLocation is normally used to store cache. Setting the following to True changes the storage location of the cache to:
-    # Windows: os.getenv('LOCALAPPDATA') / py3translationServer/cache
-    # Linux: ~/.config/py3translationServer/cache
-# Not implemented yet.
-defaultStoreCacheInLocalEnvironment=False
-
-# Valid values are spawn, fork, and forkserver. Changing this will lead to untested behavior.
-# https://docs.python.org/3.12/library/multiprocessing.html#contexts-and-start-methods
-defaultProcessesSpawnTechnique='spawn'
-# fairseq does not play well with multithreading or multiprocessing, so create a toggle to help troubleshooting.
-defaultfairseqMultithreadingEnabled=True
-
-
-# These are internal variable names for fairseq and CTranslate2, so they use a slightly different variable naming scheme.
-# Fairseq documentation and source code:
-# https://fairseq.readthedocs.io/en/latest/models.html#fairseq.models.transformer.TransformerModel
-# https://github.com/facebookresearch/fairseq/blob/main/fairseq/models/transformer/transformer_base.py
-# https://github.com/facebookresearch/fairseq/blob/main/fairseq/models/transformer/transformer_legacy.py
-# https://fairseq.readthedocs.io/en/latest/_modules/fairseq/models/fairseq_model.html#BaseFairseqModel.from_pretrained
-# https://fairseq.readthedocs.io/en/latest/_modules/fairseq/tasks/translation.html?highlight=source_lang
-# https://fairseq.readthedocs.io/en/latest/command_line_tools.html#fairseq-interactive
-
-# CTranslate2 documentation and source code:
-# https://opennmt.net/CTranslate2/python/ctranslate2.Translator.html
-
-# Valid bpe values are: byte_bpe, bytes, characters, fastbpe, gpt2, bert, hf_byte_bpe, sentencepiece, subword_nmt
-# Depends upon model/model format used.
-# Note that OpenNMT refers to this as as the tokenizer type but fairseq uses a different tokenizer concept for their UI: moses, nltk, space. This default_bpe uses the value options defined by fairseq.
-default_bpe='sentencepiece'
-
-# CTranslate2 documentation:
-# https://opennmt.net/CTranslate2/python/ctranslate2.Translator.html
-# https://opennmt.net/CTranslate2/python/ctranslate2.Translator.html#ctranslate2.Translator.translate_batch
-
-# Maximum number of parallel translations. Higher values affect video memory usage. Seems to have no or little effect on CPU loads and processing time.
-default_inter_threads=16
-
-# Number of OpenMP CPU threads per translator (0 to use a default value). if the psutil library is available, then this will be updated dynamically.
-default_intra_threads=0
-
-# https://fairseq.readthedocs.io/en/latest/_modules/fairseq/tasks/fairseq_task.html?highlight=beam_size
-#beam_size is the number of tokens generated by the model. The best one will be chosen as the return value. Directly affects quality. This is the main speed vs quality setting.
-# CTranslate2 default=2. Changed to 5 as per default setting in fairseq source code. Set beam size (1 for greedy search). Best performance is 1.
-default_beam_size=5
-
-# Number of results to return.
-default_num_hypotheses=1
-default_no_repeat_ngram_size=3
-# Setting this to True corrupts the output, so leave as False until correct vmap can be built. Update: Added this to CLI instead.
-#default_use_vmap=False
+    return defaults
 
 
 #Might be an interesting read: https://docs.python.org/3/library/configparser.html
 import argparse                # Used to add command line options.
 import sys                        # End program on fail condition. Technically, this always exits as an error for anything but sys.exit(0) even if just trying to close normally, but w/e.
 import os                          # Test if file/folder exists.
+import platform                 # Used to test for Windows, Linux to implement platform specific code and thus iterlopability.
 #import io, iostream, gen  # Optional. Read from and write to objects in memory as if they were files. Used for sending cache.csv directly from memory and perhaps will be used later for cache.csv.zip. Not fully implemented yet. Import conditionally later if needed.
 #import socket                   # Optional. Used to get IP's and print them to clarify to the user where Tornado is listening. Import as needed.
 import pathlib                   # Part of standard library since 3.4. Imported for Path class which does sane path handling.
 import json                       # Accept JSON as input. Return JSON after processing.
 import time                      # Optional library. Used to calculate performance metrics. Import conditionally later. #Update: perfMetrics, cache write out time, and clear cache time require this, so just always include it instead. Part of standard library anyway.
-#import csv                        # Used to read/write cache files. Import conditionally later based upon if cache is enabled or not.
+#import csv                        # Used to read/write cache files. Import conditionally later based upon if cache is enabled or not. Update: Part of multiLanguageCache library now.
 #import date or datetime   # Humm. Could be used to append the current date to the cache backup file as cache.hash.csv.backup.Today.csv
 import signal                   #Sometimes required library. This is needed to send signal.SIGTERM to terminate processes when fairseq + CPU hangs. import conditionally as needed. Also used for UI.
 #import inspect               #Used to print out the name of the current function during execution which is useful when debugging. Import conditionally later.
-import hashlib                 # Used to identify correct cache.csv on disk and also as a psudo-rng function for temporary writes.
+#import hashlib                 # Used to identify correct cache.csv on disk and also as a psudo-rng function for temporary writes. Update: Part of multiLanguageCache library now.
+import configparser         # Used to read/write .ini files. https://docs.python.org/3/library/configparser.html
 
 #import fairseq                 # Core engine. Must be installed with 'pip install fairseq' or built from source. Import conditionally later.
 #import ctranslate2           # Core engine. Must be installed with 'pip install ctranslate2'. Import conditionally later.
 #import sentencepiece      # Core dependency. Must be installed with 'pip install sentencepiece' Used for both fairseq and ctranslate2. However, fairseq will import it internally, like with PyTorch, so do not worry about it explicitly unless ctranslate2 is specified.
 
 import asyncio                # Used for asynconous I/O. Part of standard library since 3.4. Is also a tornado dependency.
-import multiprocessing     # Part of standard library. Used for Process, Queue objects. Used in core logic and also in cache logic. #Should probably import conditionally. #Update, this is still needed, even with concurrent.futures, to deterministically set the spawn type for the child processes, spawn, fork, forserver, but is still technically optional if cache is not enabled and if preloadModel==True. Annoying to import conditionally.
+import multiprocessing     # Part of standard library. Used for Process, Queue objects. Used in core logic and also in cache logic. #Should probably import conditionally. #Update, this is still needed, even with concurrent.futures, to deterministically set the spawn type for the child processes, spawn, fork, forserver, but is still technically optional if cache is not enabled and if preloadModel==True. Annoying to import conditionally. Also used for multiprocessing.freeze_support()
 import concurrent.futures # Used to create a process that can work with asynconous I/O. Basically asyncio + multiprocessing.
 import tornado                 # Web server. tornado.escape.json_decode creates Python dictionary from input json. Must be installed with 'pip install tornado'.
 import tornado.web          # This duplicate explicit import improves compatibility with Python versions < 3.8 and pyinstaller.
 try:
+    global psutilAvailable
     import psutil                 # This library is required for fairseq + CPU + multiprocessing, but technically optional otherwise. This library is also used to optimize CTranslate2 to use the number of physical cores if running on CPU. #Update: It should be possible to remove this requirement by altering the way the new process returns its data to always return the process ID. However, the signal library would still be required and sending signal.SIGTERM to the process might be more complicated, os specific, or unsafe. Update: This is also used to identify and child processes when launching the UI in order to close them during shutdown, so back in required territory.
     psutilAvailable=True
 except ImportError:
     psutilAvailable=False
+try:
+    import resources.commonFunctions as commonFunctions
+except:
+    sys.path.append( str( pathlib.Path( __file__ ).resolve().parent ) + '/resources' )
+    #print(sys.path)
+    import commonFunctions
 
 
-# Set some more defaults that need to be after the import statments.
-currentScriptNameWithoutPath=str( os.path.basename(str(__file__)) )
-usageHelp=' Usage: ' + currentScriptNameWithoutPath + ' -h'
-defaultSysCacheLocationWin=os.getenv('LOCALAPPDATA')
-defaultSysCacheLocationWin='~/.local/'+currentScriptNameWithoutPath
 
 
-# Update ctrl + c handler on Windows. Linux should work mostly as expected without modification.
-# From Shital Shah at https://stackoverflow.com/questions/1364173/stopping-python-using-ctrlc
-# Had to change b=None to no default value, but ctrl+c seems to work more reliably now. Maybe. Still does not work sometimes.
-# The only workaround might be to always launch the .py from its own .cmd and then tell cmd to close.
-# The b in handler also does not always work but setting a default is also error prone.
-# install with: pip install pywin32
-#def handler(a,b):
-#    sys.exit(0)
-if sys.platform == 'win32':
-    try:
-        # Load different handler function for different Python versions to sometimes improve compatibility for older versions.
-        # This maybe sometimes breaks compatibility for newer Python versions, maybe.
-        if int(sys.version_info[1]) >= 8:
-            def handler(a,b):
-                sys.exit(0)
+def createCommandLineOptions( defaults, usageHelp ):
+    commandLineParser = argparse.ArgumentParser( description = 'Description: '+ pathlib.Path( __file__ ).name + ' exposes NMT models over HTTP using the Tornado web server with a Sugoi API. Supports fairseq, CTranslate2, and transformers engines. ' + usageHelp)
+    commandLineParser.add_argument( '-dev', '--device', help = 'Process using cpu, gpu, cuda, or directml. gpu is aliased to cuda. rocm is not supported yet. Default = '+defaultDevice, default = defaultDevice, type = str )
+    commandLineParser.add_argument( '-a', '--address', help = 'Specify the address to listen on. To bind to all addresses, use 0.0.0.0  Default is to bind to: '+ str( defaultAddress ), default = defaultAddress, type = str)
+    commandLineParser.add_argument( '-port', '--port', help = 'Specify the port the local server will use. Default = ' + str(defaultPort), default = defaultPort, type = int )
+
+    # preloadModel settings
+    commandLineParser.add_argument( '-pm', '--preloadModel', help = 'Load the model into memory immediately and make the system run out of memory. Default = '+str( defaults[ 'preloadModel' ], action = 'store_true' )
+    commandLineParser.add_argument( '-e', '--engine', help = 'Must be fairseq, ctranslate2, or transformers.', default = None, type = str )
+    commandLineParser.add_argument( '-m', '--modelName', help = 'The name of the model to load. It must be a supported model for that engine.', default = None, type = str )
+    commandLineParser.add_argument( '-p', '--modelPath', help = 'For fairseq, the full path to model.pretrain.pt. For CTranslate2, the full path to model.bin.', default = None, type = str )
+    commandLineParser.add_argument( '-sl', '--sourceLanguage', help = 'For Sugoi, use a two letter source language code. See: www.loc.gov/standards/iso639-2/php/code_list.php Default = None', default = None, type = str )
+    commandLineParser.add_argument( '-tl', '--targetLanguage', help = 'For Sugoi, use a two letter target language code. See: www.loc.gov/standards/iso639-2/php/code_list.php Default = None', default = None, type = str )
+
+    #cache settings
+    commandLineParser.add_argument( '-c', '--cache', help = 'Toggle cache setting from default. Enabling cache saves the results of the model for future requests. Default = cache is enabled.', action = 'store_false' )
+    commandLineParser.add_argument( '-cp', '--cachePath', help = 'The folder to store the cache. The default is to store cache in the local system appdata or ~/.cache folders.', default = None, type = str )
+    commandLineParser.add_argument( '-cfd', '--cacheFileCsvDialect', help = 'The csv dialect used for cache.csv. Default = '+,default = , type = str )
+
+    commandLineParser.add_argument( '-ui', '--uiPath', help = 'The path to the streamlit UI.py. Using streamlit requires installing it via: pip install streamlit', default = None, type = str )
+    commandLineParser.add_argument( '-dpm', '--disablePerfMetrics', help = 'Disable tracking and reporting of performance metrics. Default = Enabled.', action = 'store_false' )
+
+    # engine specific CLI values go here
+    commandLineParser.add_argument( '-t', '--cpuThreads', help = 'For CTranslate2, the number of CPU threads. Only affects CTranslate2. The default is the number of physical cores if the psutil library is available. The default without psutil is for CTranslate2 to use its internal values. Using psutil requires installing it via: pip install psutil', default = None, type = int )
+    commandLineParser.add_argument( '-vm', '--useVMap', help = 'For CTranslate2, enable the use of a vocabulary map. Must be named vmap.txt and exist in the model directory. Default = False.', action = 'store_true' )
+
+    commandLineParser.add_argument( '-ce', '--consoleEncoding', help = 'Specify the encoding used for certain types of stdout. Default = '+defaultConsoleEncoding,default = defaultConsoleEncoding, type = str )
+    commandLineParser.add_argument( '-ifeh', '--inputFileErrorHandling', help = 'If the input from files cannot be read perfectly using the specified encoding, what should happen? See: https://docs.python.org/3.8/library/codecs.html#error-handlers Default is to crash the program.', default = defaultInputFileErrorHandling, type = str )
+    commandLineParser.add_argument( '-ofeh', '--outputFileErrorHandling', help = 'If the output from files cannot be writen perfectly using the specified encoding, what should happen? See: https://docs.python.org/3.8/library/codecs.html#error-handlers Default is to crash the program.', default = , type = str )
+    commandLineParser.add_argument( '-vb', '--verbose', help = 'Print more information.', action = 'store_true' )
+    commandLineParser.add_argument( '-d', '--debug', help = 'Print too much information.', action = 'store_true' )
+    commandLineParser.add_argument( '-v', '--version', help = 'Print version information and exit.', action = 'store_true' )
+
+
+
+    # Parse command line settings.
+    commandLineArguments = commandLineParser.parse_args()
+    userInput = {}
+
+    userInput[ 'mode' ] = commandLineArguments.mode
+    userInput[ 'inputModelFileOrFolder' ] = commandLineArguments.modelPath
+
+    userInput[ 'device' ] = commandLineArguments.device
+    userInput[ 'sourceLanguage' ] = commandLineArguments.sourceLanguage
+    userInput[ 'targetLanguage' ] = commandLineArguments.targetLanguage
+    userInput[ 'sourceSentencePieceModel' ] = commandLineArguments.sourceSentencePieceModel
+    userInput[ 'targetSentencePieceModel' ] = commandLineArguments.targetSentencePieceModel
+
+    userInput[ 'preloadModel' ] = commandLineArguments.preloadModel
+    userInput[ 'intra_threads' ] = commandLineArguments.cpuThreads
+    userInput[ 'use_vmap' ] = commandLineArguments.useVMap
+    userInput[ 'perfMetrics' ] = commandLineArguments.disablePerfMetrics
+
+    userInput[ 'cacheEnabled' ] = commandLineArguments.cache
+    userInput[ 'uiPath' ] = commandLineArguments.uiPath
+
+    userInput[ 'address' ] = commandLineArguments.address
+    userInput[ 'port' ] = commandLineArguments.port
+
+    userInput[ 'cacheFileEncoding' ] = commandLineArguments.cacheFileEncoding
+    userInput[ 'consoleEncoding' ] = commandLineArguments.consoleEncoding
+    userInput[ 'inputErrorHandling' ] = commandLineArguments.inputFileErrorHandling
+    userInput[ 'outputErrorHandling' ] = commandLineArguments.inputFileErrorHandling
+    userInput[ 'version' ] = commandLineArguments.version
+    userInput[ 'verbose' ] = commandLineArguments.verbose
+    userInput[ 'debug' ] = commandLineArguments.debug
+
+    return userInput
+
+
+def validateInput( defaults=None, userInput=None ):
+    #Workaround to fairseq + CPU bug.
+    # Update: fairseq seems to hang on any sort of multiprocessing, multithreading, and even simple async + await calls.
+    if (mode == 'fairseq') and (device=='cpu') and (preloadModel==False) and (psutilAvailable != True):
+        # Then change to preloading the model because there is no way to end the child process reliably otherwise. It hangs after it finishes processing long batches.
+        preloadModel = True
+        if __name__ == '__main__':
+            print( '\n Warning: fairseq + CPU + multiprocessing requires psutil. Install with: \n\n    pip install psutil \n\n Since psutil is not available, preloadModel=True. \n If this behavior is not desired, install psutil.\n')
+
+    settings = userInput.update(defaults) # Is this correct?
+
+    #inputModelFileNameAndPath = None
+    #inputModelPathOnly = None
+    #inputModelNameWithoutPath = None
+    # mode and inputModel will always be used at the CLI as required inputs, so just need to validate they are correct.
+    # mode must be fairseq or CTranslate2
+    if mode.lower() == 'fairseq':
+        try:
+            import fairseq
+        except ImportError:
+            print( 'Error: fairseq was selected for mode but cannot be imported. Please install it with: pip install fairseq' )
+            sys.exit( 1 )
+
+        mode = 'fairseq'
+
+        # inputModelFileOrFolder must be a file and it must exist
+        verifyThisFileExists( inputModelFileOrFolder , 'inputModelFileOrFolder' )
+        #If there is a folder specified, could also try to auto detect a pretrained.pt model for increased flexibility.
+
+        # Create subtypes here using Path library, like path only, extension only. Not sure how they will be used/useful, but can just comment out later.
+        inputModelFileNameAndPath = inputModelFileOrFolder
+        inputModelPathObject = pathlib.Path( inputModelFileNameAndPath ).absolute()
+        inputModelPathOnly = str(inputModelPathObject.parent) # Does not include last /, and this will return one subfolder up if it is called on a folder.
+        inputModelNameWithoutPath = inputModelPathObject.name
+    elif mode.lower() == 'ctranslate2':
+        try:
+            import ctranslate2
+        except ImportError:
+            print( 'Error: ctranslate2 was selected for mode but cannot be imported. Please install it with: pip install ctranslate2' )
+            sys.exit( 1 )
+        try:
+            import sentencepiece
+        except ImportError:
+            print( 'Error: sentencepiece cannot be imported. Please install sentencepiece with: pip install sentencepiece' )
+            sys.exit( 1 )
+
+        mode = 'ctranslate2'
+        inputModelFileOrFolderObject = pathlib.Path( inputModelFileOrFolder ).absolute()
+
+        # If the specified path is a file, then get the folder from the str(pathlib.Path(myPath).parent)
+        # and then continue to run as normal. ctranslate2 will refuse to load the model if not valid, so do not worry about it.
+        if checkIfThisFileExists( inputModelFileOrFolder ) == True:
+            inputModelFileNameAndPath=str(inputModelFileOrFolderObject)
+            inputModelPathOnly=str(inputModelFileOrFolderObject.parent)
+            inputModelNameWithoutPath=inputModelFileOrFolderObject.name
         else:
-            def handler(a,b=None):
-                sys.exit(0)
-        import win32api
-        win32api.SetConsoleCtrlHandler(handler, True)
-    except ImportError:
-        pass
+            #inputModelFileOrFolder must be a folder and it must exist
+            # The model must also exist inside of it, but maybe let the ctranslate2 library worry about that? It might have its own code for detecting different ctranslate2 formats or w/e.
+            verifyThisFolderExists( inputModelFileOrFolder,'inputModelFileOrFolder' )
 
-
-# Add command line options.
-commandLineParser=argparse.ArgumentParser(description='Description: '+ currentScriptNameWithoutPath + ' exposes fairseq and CTranslate2 models over HTTP using the Tornado web server. ' + usageHelp)
-
-commandLineParser.add_argument('mode', help='Must be fairseq or ctranslate2.', default=None, type=str)
-commandLineParser.add_argument('modelPath', help='For fairseq, the model.pretrain, including path. For CTranslate2, the folder containing model.bin.', default=None, type=str)
-
-commandLineParser.add_argument('-dev', '--device', help='Process using cpu, gpu, cuda, or directml. gpu is aliased to cuda. rocm is not supported yet. Default='+defaultDevice, default=defaultDevice, type=str)
-
-commandLineParser.add_argument('-sl', '--sourceLanguage', help='Two letter source language code. See: www.loc.gov/standards/iso639-2/php/code_list.php Default=None', default=None, type=str)
-commandLineParser.add_argument('-tl', '--targetLanguage', help='Two letter target language code. See: www.loc.gov/standards/iso639-2/php/code_list.php Default=None', default=None, type=str)
-commandLineParser.add_argument('-sspm', '--sourceSentencePieceModel', help='The source sentencepiece model name and path. Default is based on source language.', default=None, type=str)
-commandLineParser.add_argument('-tspm', '--targetSentencePieceModel', help='The target sentencepiece model and path. Default is based on target language.', default=None, type=str)
-
-commandLineParser.add_argument('-pm', '--preloadModel', help='Make the system run out of memory. Default=Disabled.', action='store_true')
-commandLineParser.add_argument('-t', '--cpuThreads', help='Specify the number of CPU threads. Only affects CTranslate2. If the psutil library is available, the default is the number of physical cores. Otherwise without psutil, CTranslate2 will use its internal values. Using psutil requires installing it via: pip install psutil', default=None, type=int)
-commandLineParser.add_argument('-vm', '--useVMap', help='For CTranslate2, enabe the use of a vocabulary map. Must be named vmap.txt. Default=False.', action='store_true')
-commandLineParser.add_argument('-dpm', '--disablePerfMetrics', help='Disable tracking and reporting of performance metrics. Default=Enabled.', action='store_false')
-
-commandLineParser.add_argument('-c', '--cache', help='Toggle cache setting from default. Enabling cache saves the results of the model for future requests. Default=cache is enabled.', action='store_false')
-commandLineParser.add_argument('-ui', '--uiPath', help='Specify the path to the streamlit UI. Using streamlit requires installing it via: pip install streamlit', default=None, type=str)
-
-commandLineParser.add_argument('-a', '--address', help='Specify the address to listen on. To bind to all addresses, use 0.0.0.0  Default is to bind to: '+ str(defaultAddress), default=defaultAddress, type=str)
-commandLineParser.add_argument('-p', '--port', help='Specify the port the local server will use. Default=' + str(defaultPort), default=defaultPort, type=int)
-
-commandLineParser.add_argument('-cfe', '--cacheFileEncoding', help='Specify the encoding used for cache.csv. Default='+defaultFileEncoding,default=defaultFileEncoding, type=str)
-commandLineParser.add_argument('-ce', '--consoleEncoding', help='Specify the encoding used for certain types of stdout. Default='+defaultConsoleEncoding,default=defaultConsoleEncoding, type=str)
-commandLineParser.add_argument('-ifeh', '--inputFileErrorHandling', help='If the input from files cannot be read perfectly using the specified encoding, what should happen? See: https://docs.python.org/3.8/library/codecs.html#error-handlers Default is to crash the program.', default=defaultInputFileErrorHandling, type=str)
-commandLineParser.add_argument('-v', '--version', help='Print version information and exit.', action='store_true')
-commandLineParser.add_argument('-vb', '--verbose', help='Print more information.', action='store_true')
-commandLineParser.add_argument('-d', '--debug', help='Print too much information.', action='store_true')
-
-
-# Parse command line settings.
-commandLineArguments=commandLineParser.parse_args()
-
-mode=commandLineArguments.mode
-inputModelFileOrFolder=commandLineArguments.modelPath
-
-device=commandLineArguments.device
-sourceLanguage=commandLineArguments.sourceLanguage
-targetLanguage=commandLineArguments.targetLanguage
-sourceSentencePieceModel=commandLineArguments.sourceSentencePieceModel
-targetSentencePieceModel=commandLineArguments.targetSentencePieceModel
-
-preloadModel=commandLineArguments.preloadModel
-intra_threads=commandLineArguments.cpuThreads
-use_vmap=commandLineArguments.useVMap
-perfMetrics=commandLineArguments.disablePerfMetrics
-
-cacheEnabled=commandLineArguments.cache
-uiPath=commandLineArguments.uiPath
-
-address=commandLineArguments.address
-port=commandLineArguments.port
-
-cacheFileEncoding=commandLineArguments.cacheFileEncoding
-consoleEncoding=commandLineArguments.consoleEncoding
-inputErrorHandling=commandLineArguments.inputFileErrorHandling
-version=commandLineArguments.version
-verbose=commandLineArguments.verbose
-debug=commandLineArguments.debug
-
-
-# Validate input.
-if (perfMetrics == True) or (verbose==True) or (debug == True):
-    #import time                     # Optional library. Used to calculate performance metrics. #Update, processing time should be optionally reported even if verbose==True, so load it if either of those conditions are true. Debug being true implies that verbose is as well. # Update2. Will need to always import time at some point for cache functionality for delaying writing out cache file for at least 30s, ideally 60s.
-    startedLoadingTime = time.perf_counter()
-
-
-if version == True:
-    sys.exit( (currentScriptNameWithoutPath + ' ' + __version__).encode(consoleEncoding) )
-
-
-if debug == True:
-    verbose = True
-    import inspect   #Used to print out the name of the current function during execution which is useful when debugging.
-
-
-# Define helper functions to help validate input.
-def verifyThisFileExists(myFile,nameOfFileToOutputInCaseOfError=None):
-    if myFile == None:
-        sys.exit( ('Error: Please specify a valid file for: ' + str(nameOfFileToOutputInCaseOfError) + usageHelp).encode(consoleEncoding))
-    if os.path.isfile(myFile) != True:
-        sys.exit( (' Error: Unable to find file \'' + str(nameOfFileToOutputInCaseOfError) + '\' ' + usageHelp).encode(consoleEncoding) )
- 
-def verifyThisFolderExists(myFolder, nameOfFileToOutputInCaseOfError=None):
-    if myFolder == None:
-        sys.exit( ('Error: Please specify a valid folder for: ' + str(nameOfFileToOutputInCaseOfError) + usageHelp).encode(consoleEncoding))
-    if os.path.isdir(myFolder) != True:
-        sys.exit( (' Error: Unable to find folder \'' + str(nameOfFileToOutputInCaseOfError) + '\' ' + usageHelp).encode(consoleEncoding) )
-
-def checkIfThisFileExists(myFile):
-    if (myFile == None) or (os.path.isfile(myFile) != True):
-        return False
-    return True
-
-def checkIfThisFolderExists(myFolder):
-    if (myFolder == None) or (os.path.isdir(myFolder) != True):
-        return False
-    return True
-
-
-#Update path of current script.
-currentScriptPathObject = pathlib.Path( __file__ ).absolute()
-currentScriptPathOnly = str(currentScriptPathObject.parent) #Does not include last / and this will return one subfolder up if it is called on a folder.
-#currentScriptNameWithoutPath=    #This was defined earlier already
-
-
-inputModelFileNameAndPath=None
-inputModelPathOnly=None
-inputModelNameWithoutPath=None
-# mode and inputModel will always be used at the CLI as required inputs, so just need to validate they are correct.
-# mode must be fairseq or CTranslate2
-if mode.lower() == 'fairseq':
-    try:
-        import fairseq
-    except ImportError:
-        sys.exit( 'Error: fairseq was selected for mode but cannot be imported. Please install it with: pip install fairseq' )
-
-    mode = 'fairseq'
-
-    # inputModelFileOrFolder must be a file and it must exist
-    verifyThisFileExists( inputModelFileOrFolder , 'inputModelFileOrFolder' )
-    #If there is a folder specified, could also try to auto detect a pretrained.pt model for increased flexibility.
-
-    # Create subtypes here using Path library, like path only, extension only. Not sure how they will be used/useful, but can just comment out later.
-    inputModelFileNameAndPath=inputModelFileOrFolder
-    inputModelPathObject= pathlib.Path( inputModelFileNameAndPath ).absolute()
-    inputModelPathOnly = str(inputModelPathObject.parent) # Does not include last /, and this will return one subfolder up if it is called on a folder.
-    inputModelNameWithoutPath = inputModelPathObject.name
-elif mode.lower() == 'ctranslate2':
-    try:
-        import ctranslate2
-    except ImportError:
-        sys.exit( 'Error: ctranslate2 was selected for mode but cannot be imported. Please install it with: pip install ctranslate2' )
-    try:
-        import sentencepiece
-    except ImportError:
-        sys.exit( 'Error: sentencepiece cannot be imported. Please install sentencepiece with: pip install sentencepiece' )
-
-    mode = 'ctranslate2'
-    inputModelFileOrFolderObject=pathlib.Path( inputModelFileOrFolder ).absolute()
-
-    # If the specified path is a file, then get the folder from the str(pathlib.Path(myPath).parent)
-    # and then continue to run as normal. ctranslate2 will refuse to load the model if not valid, so do not worry about it.
-    if checkIfThisFileExists(inputModelFileOrFolder) == True:
-        inputModelFileNameAndPath=str(inputModelFileOrFolderObject)
-        inputModelPathOnly=str(inputModelFileOrFolderObject.parent)
-        inputModelNameWithoutPath=inputModelFileOrFolderObject.name
+            # Create subtypes here using Path library.
+            inputModelFileNameAndPath=str(inputModelFileOrFolderObject) + '/' + defaultCTranslate2ModelName
+            inputModelPathOnly = str( inputModelFileOrFolderObject )
+            # if no model name was specified, then fudge the model name based upon last folder in the path. #Might want to just set this to the defaultCTranslate2ModelName instead.
+            inputModelNameWithoutPath = inputModelFileOrFolderObject.parts[ len( inputModelFileOrFolderObject.parts ) - 1 ]
     else:
-        #inputModelFileOrFolder must be a folder and it must exist
-        # The model must also exist inside of it, but maybe let the ctranslate2 library worry about that? It might have its own code for detecting different ctranslate2 formats or w/e.
-        verifyThisFolderExists(inputModelFileOrFolder,'inputModelFileOrFolder')
-
-        # Create subtypes here using Path library.
-        inputModelFileNameAndPath=str(inputModelFileOrFolderObject) + '/' + defaultCTranslate2ModelName
-        inputModelPathOnly=str(inputModelFileOrFolderObject)
-        # if no model name was specified, then fudge the model name based upon last folder in the path. #Might want to just set this to the defaultCTranslate2ModelName instead.
-        inputModelNameWithoutPath=inputModelFileOrFolderObject.parts[len(inputModelFileOrFolderObject.parts)-1]
-else:
-    sys.exit( ('Error: mode must be ctranslate2 or fairseq. Mode=' + str(mode)).encode(consoleEncoding) )
+        print( ( 'Error: mode must be ctranslate2 or fairseq. Mode=' + str( mode ) ).encode( consoleEncoding ) )
+        sys.exit( 1 )
 
 
-# Now that inputModelNameWithoutPath is known, update some more variables for later use.
-scriptNameWithVersion = currentScriptNameWithoutPath + '/' +__version__
-scriptNameWithVersionDictionary = { 'content' : scriptNameWithVersion }
-modeAndModelName = mode + '/' + inputModelNameWithoutPath
-modeAndModelNameDictionary = { 'content' : modeAndModelName }
+    # Now that inputModelNameWithoutPath is known, update some more variables for later use.
+    scriptNameWithVersion = currentScriptNameWithoutPath + '/' +__version__
+    scriptNameWithVersionDictionary = { 'content' : scriptNameWithVersion }
+    modeAndModelName = mode + '/' + inputModelNameWithoutPath
+    modeAndModelNameDictionary = { 'content' : modeAndModelName }
 
-
-# verify device
-if device.lower() == 'cpu':
-    device='cpu'
-elif device.lower() == 'gpu':
-    # Create alias.
-    device='cuda'
-elif device.lower() == 'cuda':
-    device='cuda'
-elif device.lower() == 'rocm':
-    device='rocm'
-elif device.lower() == 'directml':
-    device='directml'
-    if mode != 'fairseq':
-        sys.exit( ('Error: Device \'directml\' is only valid for fairseq. Mode=\''+ mode + '\' Current device=\'' + device +'\'').encode(consoleEncoding) )
-    try:
-        # https://github.com/microsoft/DirectML/tree/master/PyTorch/1.13
-        import torch
-        import torch_directml
-        dml = torch_directml.device()
-    except ImportError:
-        sys.exit( 'Problem avoided: directml was specified but did not import sucessfully. Consider using anything else, like ctranslate2. Installing directml will trash any existing PyTorch installation. Do not use. Alternatively: pip install torch-directml')
-else:
-    sys.exit( ('Error: Unrecognized device=\'' + device + '\' Must be cpu, gpu, cuda, rocm, or directml.').encode(consoleEncoding) )
-
-
-# Update cache path and related settings.
-# lazyHash is for use in a different process so that the main process does not get overfilled with memory that it will never again use when the entire model contents are read into memory.
-# Proper way is probably to create a thread and read the file in chunks, but since the model is expected to be in memory later on anyway, reading it all in at once does not bloat the memory requirements of this program beyond what they already are. However, not reading it in either in another process, or in chunks would bloat the size.
-def lazyHash(fileNameAndPath,myQueue):
-    # SHA1
-    with open(inputModelFileNameAndPath,'rb') as myFile:
-        myFileContents=myFile.read()
-        #modelHash=str(hashlib.sha1(myFileContents).hexdigest())[:10]
-    myQueue.put( str( hashlib.sha1(myFileContents).hexdigest() ) )
-
-    # CRC32
-    # So, this returns a different crc32 than 7-Zip regardless of binascii/zlip or the 'bitwise and' fix.
-    # Apparently, there are different sub standards for CRC32.
-    # https://reveng.sourceforge.io/crc-catalogue/all.htm
-    # Since SHA1 is too long, CRC32 is just borked, and there are no CRC64 libs in the Python standard library, just use a trunkated SHA1 hash as a compromise. Quirky, but whatever.
-    #import zlib
-    #import binascii
-    #with open(inputModelFileNameAndPath,'rb') as myFile:
-    #    myFileContents=myFile.read()
-    #    #modelHash=binascii.crc32(myFileContents)
-    #myQueue.put(str( (zlib.crc32(myFileContents)) & 0xffffffff) )
-
-
-# This turns translationCacheDictionary into a csv file at cacheFilePathAndName.
-# That .csv can grow quite large, so support optional compression perhaps?
-# https://docs.python.org/3/library/zipfile.html
-# This UI is a bit odd. It should accept a dictionary and a fileNameAndPath. This should probably be turned into a Class that wraps a dictionary and handles the I/O.
-def writeOutCache():
-    # Spaghetti.
-    global translationCacheDictionary
-    global modelHashFull
-
-    # Redundant, but it is better to be paranoid.
-    pathlib.Path( cacheFilePathOnly ).mkdir( parents = True, exist_ok = True )
-
-    #cacheFilePathOnly
-    #cacheFilePathAndName is the final location
-    #cacheFileNameOnly
-
-    #hashlib.sha1(myFileContents).hexdigest()
-    randomNumber=hashlib.sha1(cacheFilePathAndName.encode(consoleEncoding))
-    randomNumber.update(str(time.perf_counter()).encode(consoleEncoding))
-    randomNumber=str(randomNumber.hexdigest())[:8]
-    temporaryFileNameAndPath=cacheFilePathOnly + '/' + 'cache.temp.' + randomNumber + '.csv'
+    # verify device
+    if settings[ 'device' ].lower() == 'cpu':
+        device='cpu'
+    elif device.lower() == 'gpu':
+        # Create alias.
+        device='cuda'
+    elif device.lower() == 'cuda':
+        device='cuda'
+    elif device.lower() == 'rocm':
+        device='rocm'
+    elif device.lower() == 'directml':
+        device='directml'
+        if mode != 'fairseq':
+            print( ('Error: Device \'directml\' is only valid for fairseq. Mode=\''+ mode + '\' Current device=\'' + device +'\'').encode(consoleEncoding) )
+            sys.exit(1)
+        try:
+            # https://github.com/microsoft/DirectML/tree/master/PyTorch/1.13
+            import torch
+            import torch_directml
+            dml = torch_directml.device()
+        except ImportError:
+            print( 'Problem avoided: directml was specified but did not import sucessfully. Consider using anything else, like ctranslate2. Installing directml will trash any existing PyTorch installation. Do not use. Alternatively: pip install torch-directml')
+            sys.exit(1)
+    else:
+        print( ('Error: Unrecognized device=\'' + device + '\' Must be cpu, gpu, cuda, rocm, or directml.' ).encode( consoleEncoding ) )
+        sys.exit( 1 )
 
     if debug == True:
-        print( 'temporaryFileNameAndPath=' + temporaryFileNameAndPath )
+        verbose = True
+        import inspect   #Used to print out the name of the current function during execution which is useful when debugging.
 
-    #write to temporary file first.
-    with open(temporaryFileNameAndPath, 'w', newline='', encoding=cacheFileEncoding) as myOutputFileHandle:
-        myCsvHandle = csv.writer(myOutputFileHandle)
-        myCsvHandle.writerow(['rawText',inputModelNameWithoutPath + '.' +modelHashFull])
-        for i, k in translationCacheDictionary.items():
-            myCsvHandle.writerow( [str(i),str(k)] )
 
-    if checkIfThisFileExists(temporaryFileNameAndPath) == True:
-        #Replace any existing cache with the temporary one.
-        pathlib.Path(temporaryFileNameAndPath).replace(cacheFilePathAndName)
-        print( ('Wrote cache to disk at: ' + cacheFilePathAndName).encode(consoleEncoding) )
-    else:
-        print( ('Warning: Error writing temporary cache file at:' + temporaryFileNameAndPath).encode(consoleEncoding) )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def writeOutCache():
+    global translationCacheDictionary
 
 #This turns translationCacheDictionary into a csv file at cacheFilePathAndName.
 def clearCache():
     global translationCacheDictionary
-    translationCacheDictionary={}
+    translationCacheDictionary = { }
     print( 'Cleared cache.' )
 
-if ( __name__ == '__main__' ) and ( cacheEnabled == True ):
-    # import libraries specific to handling cache.
-    import csv    #i/o cache to disk
-    #import hashlib  # Used to identify correct cache.csv on disk and also as a psudo-rng function for temporary writes.
 
+#if ( __name__ == '__main__' ) and ( cacheEnabled == True ):
+def initalizeCache( inputModelFileNameAndPath=None ):
     # Initialize translationCacheDictionary
-    translationCacheDictionary={}
+    translationCacheDictionary = { }
     # Initalize timeCacheWasLastWritten
-    timeCacheWasLastWritten=time.perf_counter()
-    timeCacheWasLastCleared=time.perf_counter()
+    timeCacheWasLastWritten = time.perf_counter()
+    timeCacheWasLastCleared = time.perf_counter()
 
-    verifyThisFileExists(inputModelFileNameAndPath,'modelNameAndPath')
-    if debug == True:
-        print('cacheEnabled='+str(cacheEnabled))
-    print( 'Attempting to read cache for model: ' + str(inputModelFileNameAndPath) )
+    verifyThisFileExists( inputModelFileNameAndPath, 'modelNameAndPath' )
+    print( 'Attempting to read cache for model: ' + str( inputModelFileNameAndPath ) )
 
     # Dump the work of reading the file onto another process so main process does not have to deal with it.
-    # This is low level code according to the concurrent.futures python docs since that documentation refers to itself as a high-level wrapper for multiprocessing.
-    # https://docs.python.org/3/library/concurrent.futures.html
-    # https://docs.python.org/3/library/multiprocessing.html
-    modelHash=None
-    myQueue = multiprocessing.Queue()
-    lazyHashFunction = multiprocessing.Process(target=lazyHash, args=(inputModelFileNameAndPath,myQueue,) )
-    lazyHashFunction.start()
-    modelHashFull = myQueue.get()
-    lazyHashFunction.join()
+
     if modelHashFull == None:
-        sys.exit( ('Error: Could not generate hash from model file.' + str(inputModelFileNameAndPath)).encode(consoleEncoding) )
+        print( 'Error: Could not generate hash from model file.' + str( inputModelFileNameAndPath )).encode( consoleEncoding ) )
+        sys.exit(1)
     modelHash=modelHashFull[:10] # Truncate hash to make the file name more friendly to file system length limitations.
 
-    cacheFilePathOnly=currentScriptPathOnly+'/'+defaultCacheLocation
+    cacheFilePathOnly=currentScriptPathOnly + '/' + defaultCacheLocation
     cacheFileNameOnly='cache.'+ modelHash + '.csv' #Hardcoded. Maybe add prefix and postfix variables?
     cacheFilePathAndName=cacheFilePathOnly + '/' + cacheFileNameOnly
 
@@ -502,157 +372,17 @@ if ( __name__ == '__main__' ) and ( cacheEnabled == True ):
     if verbose == True:
         print( 'cacheFilePathAndName=' + cacheFilePathAndName )
 
-    if checkIfThisFileExists(cacheFilePathAndName) ==  True:
-        # Then cache exists. Path to it also already exists.
         # Read entries to translationCacheDictionary.
         # If valid then read as normal, but if any error occurs, then print out that there was an error when reading the cache file and just use a new one.
-        try:
-            with open(cacheFilePathAndName, newline='', encoding=cacheFileEncoding, errors=inputErrorHandling) as myFileHandle:
-                csvReader = csv.reader(myFileHandle, strict=True)
-                currentLine=0
-                for line in csvReader:
-                    # Skip first line.
-                    if currentLine == 0:
-                        currentLine+=1
-                    elif currentLine != 0:
-                        #if ignoreWhitespace == True:
-                        for i in range(len(line)):
-                            line[i]=line[i].strip()
-                        if line[1] == '':
-                            line[1] = None
-                        translationCacheDictionary[line[0]]=line[1]
-        except:
-            print( ('Warning: Reinitalizing cache due to error reading input cache.csv: ' + cacheFilePathAndName).encode(consoleEncoding) )
-            translationCacheDictionary={}
+    translationCacheDictionary={}
 
-        if debug == True:
-            print( ('translationCacheDictionary=' + str(translationCacheDictionary)).encode(consoleEncoding) )
+    if debug == True:
+        print( ('translationCacheDictionary=' + str(translationCacheDictionary)).encode(consoleEncoding) )
 
-        print( 'Number of entries loaded into cache: ' + str(len(translationCacheDictionary)) )
+    print( 'Number of entries loaded into cache: ' + str(len(translationCacheDictionary)) )
 
-        # Rename cache file to backup file regardless of I/O errors. File has already been verified to exist. Rename to backup.
-        #print('pie')
-        cacheBackupFileName=cacheFilePathAndName + '.backup'
-        pathlib.Path(cacheFilePathAndName).replace(cacheBackupFileName) #It might make sense to append the date the backup was made, but could also just leave well enough alone.
-        print ( ('Moved old cache.csv to: ' + cacheBackupFileName).encode(consoleEncoding) )
+    print( (' Cache file not found. Creating a new one at: '+str(cacheFilePathAndName)).encode(consoleEncoding) )
 
-        # So, if the 'old' cache is moved and the still-in-memory-cache is never written out, then the cache will be deleted if the user does not translate at least 1 entry to trigger a cache write. To avoid that weird bug, flush cache here. This is a bit wasteful over just binary copying the file or not moving it until needed, but it also tests to make sure I/O actually works during initalization, so leave it.
-        if len(translationCacheDictionary) > 0:
-            writeOutCache()
-
-    else:
-        # Then cache does not exist. Create path. File will be created later when writing out entries.
-        if verbose == True:
-            print( (' Cache file not found. Creating a new one at: '+str(cacheFilePathAndName)).encode(consoleEncoding) )
-        pathlib.Path( cacheFilePathOnly ).mkdir( parents = True, exist_ok = True )
-
-
-if (sourceLanguage == None) and (checkIfThisFileExists(sourceSentencePieceModel) != True):
-    sys.exit ('Please specify a source language or a valid sourceSentencePieceModel.')
-if (targetLanguage == None) and (checkIfThisFileExists(targetSentencePieceModel) != True):
-    sys.exit ('Please specify a target language or a valid targetSentencePieceModel.')
-
-#So the sentence piece source model is always required. For ctranslate2 both source and target models are both required. If not present, then try to use the defaults and/or the specified language to guess them.
-if checkIfThisFileExists(sourceSentencePieceModel) == True:
-    # if a source language was not specified, try to guess source language based upon source sentencepiece model.
-    if (sourceLanguage == None):
-        #sourceSentencePieceModelPathObject = pathlib.Path(sourceSentencePieceModel).absolute()
-        #sourceSentencePieceModelNameOnly = sourceSentencePieceModelPathObject.name
-        sourceSentencePieceModelNameOnly = pathlib.Path(sourceSentencePieceModel).name
-
-        # check to make sure both prefix and post fix are found in sourceSentencePieceModelNameOnly
-        # error out if either of them are not found because they must both be present
-        if (sourceSentencePieceModelNameOnly.find( defaultSentencePieceModelPrefix ) == -1) or ( sourceSentencePieceModelNameOnly.find( defaultSentencePieceModelPostfix ) == -1):
-            sys.exit('Unable to determine source language from sentencepiece model name. Please specify --sourceLanguage (-sl).' + usageHelp)
-
-        # Remove prefix and postfix from the name. 
-        tempString=sourceSentencePieceModelNameOnly.replace(defaultSentencePieceModelPrefix,'')
-        tempString=tempString.replace(defaultSentencePieceModelPostfix,'')
-
-        #If the result is not length = 2 or length=3, then error out,
-        if ( len(tempString) <=1 ) or ( len(tempString) >= 4):
-            sys.exit('Unable to determine source language from sentencepiece model name. Incorrect length. Please specify --sourceLanguage (-sl).' + usageHelp)
-
-        #otherwise set source language to those two or three characters.
-        sourceLanguage=tempString
-
-        print( ('Set sourceLanguage to \'' + sourceLanguage + '\' from: \'' + sourceSentencePieceModelNameOnly + '\'.').encode(consoleEncoding) )
-
-#if checkIfThisFileExists(sourceSentencePieceModel) != True:
-else: 
-    tempFileName=defaultSentencePieceModelPrefix+sourceLanguage+defaultSentencePieceModelPostfix
-    #tempPath=inputModelPathOnly
-    if checkIfThisFileExists(inputModelPathOnly + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/../' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly + '/../' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/' + defaultSentencePieceModelFolder0 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/' + defaultSentencePieceModelFolder0 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/' + defaultSentencePieceModelFolder1 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/' + defaultSentencePieceModelFolder1 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/' + defaultSentencePieceModelFolder2 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/' + defaultSentencePieceModelFolder2 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder0 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder0 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder1 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder1 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder2 + '/' + tempFileName) == True:
-        sourceSentencePieceModel=inputModelPathOnly+ '/../' + defaultSentencePieceModelFolder2 + '/' + tempFileName
-    verifyThisFileExists(sourceSentencePieceModel,'sourceSentencePieceModel')
-
-    if __name__ == '__main__':
-        print( ('Set sourceSentencePieceModel to \'' + str(sourceSentencePieceModel) + '\' from: \'' + sourceLanguage + '\'.').encode(consoleEncoding) )
-
-if checkIfThisFileExists(targetSentencePieceModel) == True:
-    #If a target language was not specified, try to guess target language based upon target sentencepiece model.
-    if (targetLanguage == None):
-        targetSentencePieceModelNameOnly = pathlib.Path(targetSentencePieceModel).name
-
-        # check to make sure both prefix and post fix are found in targetSentencePieceModelNameOnly
-        # error out if either of them are not found because they must both be present
-        if (targetSentencePieceModelNameOnly.find( defaultSentencePieceModelPrefix ) == -1) or ( targetSentencePieceModelNameOnly.find( defaultSentencePieceModelPostfix ) == -1):
-            sys.exit('Unable to determine target language from sentencepiece model name. Please specify --targetLanguage (-sl).' + usageHelp)
-
-        # Remove prefix and postfix from the name. 
-        tempString=targetSentencePieceModelNameOnly.replace(defaultSentencePieceModelPrefix,'')
-        tempString=tempString.replace(defaultSentencePieceModelPostfix,'')
-
-        #If the result is not length = 2 or length=3, then error out,
-        if ( len(tempString) <=1 ) or ( len(tempString) >= 4):
-            sys.exit('Unable to determine target language from sentencepiece model name. Incorrect length. Please specify --targetLanguage (-sl).' + usageHelp)
-
-        #otherwise set target language to those two or three characters.
-        targetLanguage=tempString
-
-        if __name__ == '__main__':
-            print( ('Set targetLanguage to \'' + targetLanguage + '\' from: \'' + targetSentencePieceModelNameOnly + '\'.').encode(consoleEncoding) )
-
-#if checkIfThisFileExists(targetSentencePieceModel) != True
-else:
-    tempFileName=defaultSentencePieceModelPrefix+targetLanguage+defaultSentencePieceModelPostfix
-    #tempPath2=inputModelPathOnly + '/' + tempFileName
-    if checkIfThisFileExists(inputModelPathOnly + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/../' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/../' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/' + defaultSentencePieceModelFolder0 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/' + defaultSentencePieceModelFolder0 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/' + defaultSentencePieceModelFolder1 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/' + defaultSentencePieceModelFolder1 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/' + defaultSentencePieceModelFolder2 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/' + defaultSentencePieceModelFolder2 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/../' + defaultSentencePieceModelFolder0 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/../' + defaultSentencePieceModelFolder0 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/../' + defaultSentencePieceModelFolder1 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/../' + defaultSentencePieceModelFolder1 + '/' + tempFileName
-    elif checkIfThisFileExists(inputModelPathOnly + '/../' + defaultSentencePieceModelFolder2 + '/' + tempFileName) == True:
-        targetSentencePieceModel=inputModelPathOnly + '/../' + defaultSentencePieceModelFolder2 + '/' + tempFileName
-    #The target is optional for fairseq, but required for ctranslate2.
-    if mode == 'ctranslate2':
-        verifyThisFileExists(targetSentencePieceModel,'targetSentencePieceModel')
-
-    if __name__ == '__main__':
-        print( ('Set targetSentencePieceModel to \'' + str(targetSentencePieceModel) + '\' from: \'' + targetLanguage + '\'.').encode(consoleEncoding) )
 
 
 if uiPath != None:
@@ -661,7 +391,7 @@ if uiPath != None:
     else:
         print( 'Warning: Streamlit UI was specified but could not be found:\n')
         print( uiPath.encode(consoleEncoding) )
-        print('')
+        print( '' )
         uiPath=None
 
 
@@ -674,109 +404,13 @@ no_repeat_ngram_size=default_no_repeat_ngram_size
 inter_threads=default_inter_threads
 
 
-# For best processing time with CTranslate2, CPU threads should be the same as the number of physical cores for CPU loads (not logical cores). Unclear what it should be for GPU loads but the same number as with CPU loads is a good default based upon initial testing. Update: CPU theads does not matter much when using GPU. Use default setting.
-#If the user specified a number of intra_threads, as --cpuThreads, then just use that instead.
-if intra_threads != None:
-    pass
-elif (mode=='ctranslate2') and (device=='cpu'):
-    if psutilAvailable == True:
-        #Always gives logical cores. Incorrect.
-        #intra_threads=os.cpu_count()
 
-        #Gives physical cores. Correct.
-        intra_threads=psutil.cpu_count(logical=False)
-
-        # Setting intra_threads=psutil.cpu_count(logical=False) always gives the wrong value for Bulldozer family FX series processors (2 Module - 4 thread ; 3 Module - 6 thread; 4 Module - 8 thread). Bulldozer FX series should use logical cores, not module count, because every logical core has some dedicated hardware to process the thread, unlike SMT.
-        # https://en.wikipedia.org/wiki/List_of_AMD_FX_processors
-        # Bandaid for Bulldozer FX systems on Windows.
-        # This will likely hurt performance for users that have non-Bulldozer AMD FX systems. No modern AMD FX processors currently exist, so this is more of a concern for the future.
-        # A proper fix might be to create alwaysUseLogicalCores.csv and look up the full processor name there, but it would be a challenge getting it fully correct due to needing the exact processor name which might require real hardware to test with which is unrealistic.
-        # Alternatively, this could be exposed to the user and they could deal with it at runtime.
-        # Maybe just always override this setting to whatever the user inputs? Update: Implemented this with the --cpuThreads option to allow for manual overrides.
-        # This band-aid fix is currently only available on Windows.
-        if sys.platform == 'win32':
-            try:
-                import win32com.client
-                if ( str(win32com.client.GetObject('winmgmts:root\cimv2').ExecQuery('Select * from Win32_Processor')[0].Name).strip()[:6] == 'AMD FX' ):
-                    intra_threads=os.cpu_count()
-            except:
-                pass
-
-        # Fix for BSD systems. See:
-        # https://psutil.readthedocs.io/en/latest/#psutil.cpu_count
-        if intra_threads == None:
-            intra_threads=default_intra_threads
-
-    elif psutilAvailable == False:
-        intra_threads=default_intra_threads
-else:
-    intra_threads=default_intra_threads
-
-# Probably pointless, but just in case.
-try:
-    assert(isinstance(intra_threads,int))
-except:
-    print( 'Warning: Could not set CPU threads for CTranslate2 correctly.' )
-    intra_threads=0
 
 if ( __name__ == '__main__' ) and (verbose == True) and (mode == 'ctranslate2'):
     print ( 'CTranslate2 CPU threads=' + str(intra_threads) )
 
 
-# Debug code.
-#psutilAvailable=False
 
-#Workaround to fairseq + CPU bug.
-# Update: fairseq seems to hang on any sort of multiprocessing, multithreading, and even simple async + await calls.
-if (mode == 'fairseq') and (device=='cpu') and (preloadModel==False) and (psutilAvailable != True):
-    # Then change to preloading the model because there is no way to end the child process reliably otherwise. It hangs after it finishes processing long batches.
-    preloadModel = True
-    if __name__ == '__main__':
-        print( '\n Warning: fairseq + CPU + multiprocessing requires psutil. Install with: \n\n    pip install psutil \n\n Since psutil is not available, preloadModel=True. \n If this behavior is not desired, install psutil.\n')
-#if (mode == 'fairseq') and (device=='cpu'):
-#    import signal  #Sometimes required library. This is needed to send signal.SIGTERM to terminate processes when fairseq hangs. import conditionally.
-
-
-if __name__ == '__main__':
-    # Print information to inform the user and help with debugging. Print it only in main since otherwise it gets printed out a lot.
-
-    # Always print out mode (fairseq/ctranslate 2)
-    print( 'mode=\''+mode + '\'' )
-    # Always print out device (cpu, cuda, directml)
-    print( 'device=\'' + device + '\'' )
-    # Always print out source language and target language
-    print( ('Source Language=\'' + sourceLanguage + '\'' ).encode(consoleEncoding) )
-    print( ('Target Language= \''+ targetLanguage + '\'' ).encode(consoleEncoding) )
-
-    if (verbose == True) or (debug == True):
-    # print out model name and path
-        print( ('inputModelFileNameAndPath=' + str(inputModelFileNameAndPath)).encode(consoleEncoding) )
-    # print out checkpoint file name (if present, only guranteed to be valid for fairseq)
-        print( ('inputModelNameWithoutPath=' + str(inputModelNameWithoutPath) ).encode(consoleEncoding) )
-    # print out model path
-        print( ('inputModelPathOnly=' + str(inputModelPathOnly) ).encode(consoleEncoding) )
-    # print source sentencepiece_model
-        print( ('sourceSentencePieceModel=' + str(sourceSentencePieceModel) ).encode(consoleEncoding) )
-    # print target sentencepiece_model (only for ctranslate 2)
-        print( ('targetSentencePieceModel=' + str(targetSentencePieceModel) ).encode(consoleEncoding) )
-
-    if debug == True:
-        # print out rest of variables
-        print( ('preloadModel=' + str(preloadModel) ).encode(consoleEncoding) )
-        print( ('perfMetrics=' + str(perfMetrics) ).encode(consoleEncoding) )
-        print( ('address=' + str(address) ).encode(consoleEncoding) )
-        print( ('port=' + str(port) ).encode(consoleEncoding) )
-        print( ('version=' + str(version) ).encode(consoleEncoding) )
-        print( ('cacheEnabled=' + str(cacheEnabled) ).encode(consoleEncoding) )
-        print( ('verbose=' + str(verbose) ).encode(consoleEncoding) )
-        print( ('debug=' + str(debug) ).encode(consoleEncoding) )
-        print( ('tornado version=' + str(tornado.version) ).encode(consoleEncoding) )
-        if mode == 'fairseq':
-            print( ('fairseq version=' + str(fairseq.__version__) ).encode(consoleEncoding) )
-        if mode == 'ctranslate2':
-            print( ('ctranslate2 version=' + str(ctranslate2.__version__) ).encode(consoleEncoding) )
-        #if device == 'directml':
-            #print out directML version and torch version. Maybe OS ver as well? Since it has arbitrary requirements.
 
 
 # Start app based upon input.
@@ -784,8 +418,8 @@ if __name__ == '__main__':
 if mode == 'fairseq':
     pass
 elif mode == 'ctranslate2':
-    sourceLanguageProcessor = sentencepiece.SentencePieceProcessor(sourceSentencePieceModel)
-    targetLanguageProcessor = sentencepiece.SentencePieceProcessor(targetSentencePieceModel)
+    sourceLanguageProcessor = sentencepiece.SentencePieceProcessor( sourceSentencePieceModel )
+    targetLanguageProcessor = sentencepiece.SentencePieceProcessor( targetSentencePieceModel )
 
 
 if preloadModel == True:
@@ -806,8 +440,8 @@ if preloadModel == True:
     elif mode == 'ctranslate2':
         translator = ctranslate2.Translator(inputModelPathOnly, device=device, inter_threads=inter_threads, intra_threads=intra_threads)
     else:
-        sys.exit( 'Unspecified error.' )
-
+        print( 'Unspecified error.' )
+        sys.exit( 1 )
 
 # This still blocks because a lot of time is spent here without any pause. Maybe this should go in its own thread?
 def preloadModelTranslate( rawText ):
@@ -879,8 +513,8 @@ def translateNMT( rawText ):
 
         outputText = translator.translate_batch( source=textAfterPreProcessing , beam_size=beam_size , num_hypotheses=num_hypotheses, no_repeat_ngram_size=no_repeat_ngram_size, use_vmap=use_vmap)
 
-        if (verbose == True) and (perfMetrics==True):
-            processingTime=round(time.perf_counter() - startProcessingTime, 2)
+        if ( verbose == True ) and ( perfMetrics==True ):
+            processingTime=round( time.perf_counter() - startProcessingTime, 2 )
             print( 'Processing time: ' + str( processingTime ) + ' seconds' )
 
         # multiprocessing.Queue logic.
@@ -893,24 +527,25 @@ def translateNMT( rawText ):
             newList.append( targetLanguageProcessor.decode( outputText[i].hypotheses[0] ) )
         return newList
     else:
-        sys.exit( 'Unspecified error.' )
+        print( 'Unspecified error.' )
+        sys.exit( 1 )
 
 
 # This function allows run_in_executor() to be added to a taskList, which is a Python list, and then awaiting the taskList.
 # That will process all of the entries at once with an instance of concurrent.futures.ProcessPoolExecutor .
 # Otherwise, each instance of each task will block the next and also maybe the ioloop depending upon implementation details.
-async def proxyTranslateNMT(executor, translateMe):
+async def proxyTranslateNMT( executor, translateMe ):
     #print( 'pie' * 200 )
-    return await asyncio.get_running_loop().run_in_executor(executor, translateNMT, translateMe)
+    return await asyncio.get_running_loop().run_in_executor( executor, translateNMT, translateMe )
 
 
-class MainHandler(tornado.web.RequestHandler):
-    async def get(self):
-        print('self.request=' + str(self.request) )
+class MainHandler( tornado.web.RequestHandler ):
+    async def get( self ):
+        print('self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_header('Content-Type', 'text/plain')
-        self.set_status(200)
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_header( 'Content-Type', 'text/plain' )
+        self.set_status( 200 )
 
         self.write( 'Hello. Please use HTTP POST to communicate with ' + currentScriptNameWithoutPath)
 
@@ -936,25 +571,25 @@ class MainHandler(tornado.web.RequestHandler):
             print('self.get_arguments=' + str(self.get_arguments(self)))
             print('self.get_body_arguments=' + str(self.get_body_arguments(self)))
 
-        # Basically, self.args is a dictionary made from self.request.body.
-        # self.args['content'] returns all content specified in the 'content' entry.
-        # if that returned item is a list, then self.args['content'][0] returns the first item in that list.
+        # self.args is a dictionary made from self.request.body.
+        # self.args[ 'content' ] returns all content specified in the 'content' entry.
+        # if that returned item is a list, then self.args[ 'content' ][0] returns the first item in that list.
         if debug == True:
-            print('self.request.body=' + str(self.request.body) )
+            print( 'self.request.body=' + str( self.request.body ) )
 
         # Assume input is json and just blindly decode.
         #self.args = tornado.escape.json_decode(self.request.body)
         # Check if input is json, and then code. if content is not application/json, then error out.
-        if self.request.headers.get('Content-Type') == 'application/json':
-            self.args = tornado.escape.json_decode(self.request.body)
+        if self.request.headers.get( 'Content-Type') == 'application/json' :
+            self.args = tornado.escape.json_decode( self.request.body )
         else:
             print( 'Error: Only json is supported as input currently. Returning.')
             return
 
-        if (self.args == None) or (self.args == ''):
+        if ( self.args == None ) or ( self.args == '' ):
             print( 'Error: No json contents found in request.body. Returning.')
             return
-        if not isinstance(self.args,dict):
+        if not isinstance( self.args,dict ):
             print( 'Error: request.body did not return a Python dictionary. Returning.')
             return
 
@@ -969,7 +604,7 @@ class MainHandler(tornado.web.RequestHandler):
                 print( 'content=' + str(self.args['content']) )
 
         if 'message' in self.args:
-            if ( str(self.args['message']).lower() == 'close server' ):
+            if ( str(self.args[ 'message' ]).lower() == 'close server' ):
                 if (cacheEnabled == True) and (len(translationCacheDictionary) != 0):    
                     writeOutCache()
                 print('Info: Recieved \'close server\' message. Exiting.')
@@ -988,7 +623,7 @@ class MainHandler(tornado.web.RequestHandler):
         rawInput=None
         if 'content' in self.args:
             #self.args['content'] can be a string, which is a single sentence to translate, or it can be a Python list of many strings.
-            rawInput=self.args['content']
+            rawInput=self.args[ 'content' ]
         else:
             #The data processing assumes the data is in self.args['content']. If there is another place to look, then it has to be added manually, so for now, just return if there was no 'content' entry in the submitted json.
             print( 'Error: No \'content\' entry was found in the json request.body. Returning.')
@@ -1023,12 +658,12 @@ class MainHandler(tornado.web.RequestHandler):
 
         # Deal with cache.
         translateMe=[]
-        # The syntax of this is:  tempRequestDictionary['rawEntry']=[thisValueIsFromCache,translatedData]
+        # The syntax of this is:  tempRequestDictionary.append( ( 'rawEntry', thisValueIsFromCache , translatedData ) )
         #tempRequestDictionary={}
         tempRequestList=[]
         global timeCacheWasLastWritten
 
-        if (cacheEnabled == True) and (len(translationCacheDictionary) != 0):
+        if ( cacheEnabled == True ) and ( len( translationCacheDictionary ) != 0 ):
             # Dump rawInput into a dictionary that incorporates cache.
             # Bug: Using a dictionary creates a subtle bug where if a particular translation request has multiple duplicate items, those items will be de-duplicated.
             # That is problematic because then the len(input) will no longer match len(output). Therefore, use a python List instead to allow duplicates.
@@ -1041,7 +676,7 @@ class MainHandler(tornado.web.RequestHandler):
                 if i in translationCacheDictionary.keys():
                     # then add entry/i to tempRequestDictionary with thisValueIsFromCache=True
                     #tempRequestDictionary[i]=[True,translationCacheDictionary[i]]
-                    tempRequestList.append( [ i, True, translationCacheDictionary[i] ] )
+                    tempRequestList.append( [ i, True, translationCacheDictionary[ i ] ] )
                 else:
                     # Otherwise, it needs to be processed.
                     # Create a list of all the values where thisValueIsFromCache == False. Maybe create this during parsing?
@@ -1172,7 +807,7 @@ class MainHandler(tornado.web.RequestHandler):
                     # Add an arbitrary amount of tasks that should be completed in seperate processes to a random list.
                     # The max_workers parameter in ProcessPoolExecutor controls the number of processes to run at once.
                     #for i in range(200):
-                    taskList.append( asyncio.create_task( proxyTranslateNMT(executor, translateMe) ) )
+                    taskList.append( asyncio.create_task( proxyTranslateNMT( executor, translateMe ) ) )
 
                     # Execute those processes while still in the loop so that executor still exists.
                     #for f in asyncio.as_completed( taskList ):
@@ -1182,6 +817,7 @@ class MainHandler(tornado.web.RequestHandler):
                     # https://stackoverflow.com/questions/36901/what-does-double-star-asterisk-and-star-asterisk-do-for-parameters
                     #finalResults = await asyncio.gather( *taskList )
                     postTranslatedList = await asyncio.gather( *taskList ) # *postTranslatedList supposedly means 'unpack postTranslatedList' which still does not clarify its usage. Why does the assignment break when removing it? Maybe it is not a return object, but the actual stored create_task functions themselves? But in that case, then should not just feeding the raw taskList also work without unpacking? What does asyncio.gather() expect?
+                    #https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently
                     #Hint: https://docs.python.org/3/library/asyncio-subprocess.html#subprocesses
 
                     maxBatchSizeForFairseqBug=5  # Magic number.
@@ -1215,7 +851,7 @@ class MainHandler(tornado.web.RequestHandler):
                     else:
                         executor.shutdown(wait=False)
 
-                #The above returns a list which encapsulates all 1 entries in the taskList. translateNMT itself also returns a list, so there is a [[]] object returned.
+                #The above returns a list which encapsulates all 1 entries in the taskList. translateNMT itself also returns a list, so there is a [ [ ] ] object returned.
                 #Remove the outer list.
                 postTranslatedList=postTranslatedList[0]
 
@@ -1226,7 +862,7 @@ class MainHandler(tornado.web.RequestHandler):
                 print( 'translationCacheDictionary length=' + str(len( translationCacheDictionary )) )
 
         # Initalize finalOutputList
-        finalOutputList=[]
+        finalOutputList = []
         if cacheEnabled == True:
             # Decide!
             # Need to merge processed values with cache hits.
@@ -1333,7 +969,7 @@ class MainHandler(tornado.web.RequestHandler):
 # self.set_header('Content-Type', 'text/csv')
 # self.set_header('Content-Type', 'video/mp4')
 
-# self.set_header('Server', 'tornado/'+str(tornado.version)) #This is incorrect. Tornado automatically sets this correctly on its own. Example response headers for a 404:
+# self.set_header( 'Server', 'tornado/' + str( tornado.version ) ) #This is incorrect. Tornado automatically sets this correctly on its own. Example response headers for a 404:
 # HTTP/1.1 404 Not Found
 # Server: TornadoServer/6.4
 # Content-Type: text/html; charset=UTF-8
@@ -1341,53 +977,53 @@ class MainHandler(tornado.web.RequestHandler):
 # Content-Length: 69
 
 
-class ReturnVersion(tornado.web.RequestHandler):
-    async def get(self):
-        print('self.request=' + str(self.request) )
+class ReturnVersion( tornado.web.RequestHandler ):
+    async def get( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'text/plain')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'text/plain' )
 
         self.write( scriptNameWithVersion )
 
-    async def post(self):
-        print('self.request=' + str(self.request) )
+    async def post( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'application/json')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'application/json' )
 
         self.write( json.dumps( scriptNameWithVersionDictionary ) )
 
 
-class ReturnModel(tornado.web.RequestHandler):
-    async def get(self):
-        print('self.request=' + str(self.request) )
+class ReturnModel( tornado.web.RequestHandler ):
+    async def get( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
             print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'text/plain')
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'text/plain' )
 
         self.write( modeAndModelName )
 
     async def post(self):
-        print('self.request=' + str(self.request) )
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'application/json')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'application/json' )
 
         self.write( json.dumps( modeAndModelNameDictionary ) )
 
 
-class SaveCache(tornado.web.RequestHandler):
-    async def get(self):
-        print( 'self.request=' + str(self.request) )
+class SaveCache( tornado.web.RequestHandler ):
+    async def get( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'text/plain')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'text/plain' )
 
         if cacheEnabled != True:
             self.finish( 'Unable to save cache because cache is not enabled.' )
@@ -1395,55 +1031,55 @@ class SaveCache(tornado.web.RequestHandler):
 
         global timeCacheWasLastWritten
         #Check timer for cache last written. If timer > 60s, then write out to file.
-        if int( time.perf_counter()  - timeCacheWasLastWritten) > defaultSaveCacheInterval:
-            timeCacheWasLastWritten=time.perf_counter()
+        if int( time.perf_counter()  - timeCacheWasLastWritten ) > defaultSaveCacheInterval:
+            timeCacheWasLastWritten = time.perf_counter()
             try:
                 writeOutCache()
-                self.finish('Cache was written to disk.')
+                self.finish( 'Cache was written to disk.' )
                 return
             except:
                 print( 'Warning: An unspecified error occured during writeOutCache()' ) # Print to console.
                 self.finish( 'Warning: An unspecified error occured during writeOutCache()' ) # Send error message over HTTP.
                 return
         else:
-            self.finish('Cache was not written to disk. To save cache, please wait up to ' + str(defaultSaveCacheInterval) + ' seconds.')
+            self.finish( 'Cache was not written to disk. To save cache, please wait up to ' + str( defaultSaveCacheInterval ) + ' seconds.' )
             return
 
-    async def post(self):
+    async def post( self ):
         print( 'self.request=' + str(self.request) )
         if debug == True:
             print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'application/json')
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'application/json' )
 
         if cacheEnabled != True:
-            self.finish( json.dumps({ 'content': 'Unable to save cache because cache is not enabled.'}) )
+            self.finish( json.dumps( { 'content' : 'Unable to save cache because cache is not enabled.' } ) )
             return
 
         global timeCacheWasLastWritten
         #Check timer for cache last written. If timer > 60s, then write out to file.
-        if int( time.perf_counter()  - timeCacheWasLastWritten) > defaultSaveCacheInterval:
-            timeCacheWasLastWritten=time.perf_counter()
+        if int( time.perf_counter()  - timeCacheWasLastWritten ) > defaultSaveCacheInterval:
+            timeCacheWasLastWritten = time.perf_counter()
             try:
                 writeOutCache()
-                self.finish( json.dumps({'content': 'Cache was written to disk.'}) )
+                self.finish( json.dumps( { 'content' : 'Cache was written to disk.' } ) )
                 return
             except:
                 print( 'Warning: An unspecified error occured during writeOutCache()' ) # Print to console.
-                self.finish( json.dumps({'content': 'Warning: An unspecified error occured during writeOutCache()'}) ) # Send error message over HTTP.
+                self.finish( json.dumps( { 'content' : 'Warning: An unspecified error occured during writeOutCache()' } ) ) # Send error message over HTTP.
                 return
         else:
-            self.finish( json.dumps({'content': 'Cache was not written to disk. To save cache, please wait up to ' + str(defaultSaveCacheInterval) + ' seconds.'}) )
+            self.finish( json.dumps( { 'content' : 'Cache was not written to disk. To save cache, please wait up to ' + str( defaultSaveCacheInterval ) + ' seconds.' } ) )
             return
 
 
-class ClearCache(tornado.web.RequestHandler):
-    async def get(self):
-        print( 'self.request=' + str(self.request) )
+class ClearCache( tornado.web.RequestHandler ):
+    async def get( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'text/plain')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'text/plain' )
 
         if cacheEnabled != True:
             self.finish( 'Unable to clear cache because cache is not enabled.' )
@@ -1452,86 +1088,86 @@ class ClearCache(tornado.web.RequestHandler):
         global timeCacheWasLastCleared
         #Check timer for cache last written. If timer > 60s, then write out to file.
         if int( time.perf_counter()  - timeCacheWasLastCleared) > defaultMinimumClearCacheInterval:
-            timeCacheWasLastCleared=time.perf_counter()
+            timeCacheWasLastCleared = time.perf_counter()
             clearCache()
             self.finish( 'Cache was cleared.' )
             return
         else:
-            self.finish( 'Cache was not cleared. To clear cache, please wait up to ' + str(defaultMinimumClearCacheInterval) + ' seconds.' )
+            self.finish( 'Cache was not cleared. To clear cache, please wait up to ' + str( defaultMinimumClearCacheInterval ) + ' seconds.' )
             return
 
-    async def post(self):
-        print( 'self.request=' + str(self.request) )
+    async def post( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
             print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'application/json')
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'application/json' )
 
         if cacheEnabled != True:
-            self.finish( json.dumps({'content': 'Unable to clear cache because cache is not enabled.'}) )
+            self.finish( json.dumps( { 'content': 'Unable to clear cache because cache is not enabled.' } ) )
             return
 
         global timeCacheWasLastCleared
         #Check timer for cache last written. If timer > 60s, then write out to file.
         if int( time.perf_counter()  - timeCacheWasLastCleared) > defaultMinimumClearCacheInterval:
-            timeCacheWasLastCleared=time.perf_counter()
+            timeCacheWasLastCleared = time.perf_counter()
             clearCache()
-            self.finish( json.dumps({'content':'Cache was cleared.'}) )
+            self.finish( json.dumps( { 'content' : 'Cache was cleared.' } ) )
             return
         else:
-            self.finish( json.dumps({'content':'Cache was not cleared. To clear cache, please wait up to ' + str(defaultMinimumClearCacheInterval) + ' seconds.' }) )
+            self.finish( json.dumps( { 'content' : 'Cache was not cleared. To clear cache, please wait up to ' + str( defaultMinimumClearCacheInterval ) + ' seconds.' } ) )
             return
 
 
-class GetCache(tornado.web.RequestHandler):
-    async def get(self):
-        print( 'self.request=' + str(self.request) )
+class GetCache( tornado.web.RequestHandler ):
+    async def get( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
 
         if cacheEnabled != True:
-            self.set_header('Content-Type', 'application/json')
-            self.finish( json.dumps({'content': 'Unable to send cache because cache is not enabled.'}) )
+            self.set_header( 'Content-Type', 'application/json' )
+            self.finish( json.dumps( { 'content' : 'Unable to send cache because cache is not enabled.' } ) )
             return
 
         #https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition
-        self.set_header('Content-Type', 'application/csv')
-        self.set_header('Content-Disposition', 'attachment; filename=' + cacheFileNameOnly )
+        self.set_header( 'Content-Type', 'application/csv' )
+        self.set_header( 'Content-Disposition', 'attachment; filename=' + cacheFileNameOnly )
 
         # This might produce an error if the file has not been written to disk yet.
         # It might be better to read the entire file into memory, as cumbersome as that is, and then send it. That minimizes the potential of writing to the file at the same time as reading it. That wastes a lot of memory that will never be reclaimed by the OS, even if del is explcitly called on the object, however. So, which is better? Which is worse? Oh, the joys of async programming.
         chunkSize = 4194304 #4MB
-        with open(cacheFilePathAndName, 'rb') as myFileHandle:
+        with open( cacheFilePathAndName, 'rb' ) as myFileHandle:
             while True:
-                chunk = myFileHandle.read(chunkSize)
+                chunk = myFileHandle.read( chunkSize )
                 if not chunk:
                     break
                 try:
-                    self.write(chunk)
+                    self.write( chunk )
                     await self.flush()
-                    await asyncio.sleep(0)
+                    await asyncio.sleep( 0 )
                 except:
                     break
                 finally:
                     del chunk
 
-    async def post(self):
-        print( 'self.request=' + str(self.request) )
+    async def post( self ):
+        print( 'self.request=' + str( self.request ) )
         if debug == True:
-            print( 'Executing: ' + type(self).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
-        self.set_status(200)
-        self.set_header('Content-Type', 'application/json')
+            print( 'Executing: ' + type( self ).__name__ + '.' + inspect.currentframe().f_code.co_name ) #Print out className.currentFunctionName.
+        self.set_status( 200 )
+        self.set_header( 'Content-Type', 'application/json' )
 
         if cacheEnabled != True:
-            self.finish( json.dumps({'content': 'Unable to send cache because cache is not enabled.'}) )
+            self.finish( json.dumps( { 'content': 'Unable to send cache because cache is not enabled.' } ) )
             return
 
-        self.finish( json.dumps( dict( [('content',translationCacheDictionary)] ), ensure_ascii=False) )
+        self.finish( json.dumps( dict( [ ('content' , translationCacheDictionary ) ] ), ensure_ascii=False) )
         return
 
 
-async def runUI(uiPath):
+async def runUI( uiPath ):
     # Might be useful somehow: https://docs.python.org/3.8/library/shlex.html#shlex.quote
     #import subprocess
 #    myPath=os.path.join(currentScriptPathOnly,str(pathlib.Path(os.path.join( 'resources', 'webUI.py'))))
@@ -1541,9 +1177,12 @@ async def runUI(uiPath):
 
     # This syntax starts a fully independent instance of the UI. Great for stability, but not for managing the subprocess.
     # It works, but stars a new shell Window. Makes it more obvious that it needs to cleanly shut down at least.
+#    if platform.system().lower() == 'windows':
 #    if sys.platform == 'win32':
 #        fullCommand='start "py3translationServer UI - by gdiaz384" streamlit run ' + myPath + myString
+#    elif platform.system.lower() == 'linux':
 #    elif sys.platform == 'linux':
+#    else:
 #        fullCommand='bash -c streamlit run ' + myPath + myString
     # This syntax is preferred by subprocess.run()
     #fullCommand='streamlit.exe run \"' + uiPath + myString
@@ -1570,9 +1209,9 @@ async def runUI(uiPath):
     # Update: The subprocess launches correctly, but cannot communicate with the server.
     # if the subprocess is forcequit, then py3translationServer starts working again.
     # In other words, it seems like starting the subprocess locks out the main process until the subprocess completes.
-    #subprocess.run(fullCommand, capture_output=False, shell=True)
-    #subprocess.run(fullCommand)
-    
+    #subprocess.run( fullCommand, capture_output=False, shell=True)
+    #subprocess.run( fullCommand )
+
     # asyncio + exec Does not work.
     #await asyncio.create_subprocess_exec(fullCommand)
 
@@ -1581,7 +1220,7 @@ async def runUI(uiPath):
     # https://docs.python.org/3/library/asyncio-subprocess.html
     # https://docs.python.org/3.8/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process
     try:
-        return await asyncio.create_subprocess_shell(fullCommand)
+        return await asyncio.create_subprocess_shell( fullCommand )
     except:
         return None
 
@@ -1634,6 +1273,167 @@ async def runUI(uiPath):
 
 
 async def main():
+    # The following is an attempt to improve this: https://docs.python.org/3/library/asyncio-runner.html#handling-keyboard-interruption
+    # Update ctrl + c handler on Windows. Linux should work mostly as expected without modification.
+    # From Shital Shah at https://stackoverflow.com/questions/1364173/stopping-python-using-ctrlc
+    # Had to change b=None to no default value, but ctrl+c seems to work more reliably now. Maybe. Still does not work sometimes.
+    # The only workaround might be to always launch the .py from its own .cmd and then tell cmd to close.
+    # The b in handler also does not always work but setting a default is also error prone.
+    # Install with: python -m pip install pywin32
+    #def handler( a, b ):
+    #    sys.exit( 0 )
+    # One alternative is platform.system() which returns 'Windows', 'Darwin', or 'Linux'. Not sure what BSD returns.
+    #if platform.system().lower() == 'windows':
+    if ( sys.platform == 'win32' ) and ( sys.version_info.minor < 11):
+        try:
+            # Load different handler function for different Python versions to sometimes improve compatibility for older versions.
+            # This maybe sometimes breaks compatibility for newer Python versions, maybe.
+            if sys.version_info.minor >= 8:
+                def handler( a, b ):
+                    sys.exit( 0 )
+            else:
+                def handler( a, b=None ):
+                    sys.exit( 0 )
+            import win32api
+            win32api.SetConsoleCtrlHandler( handler, True )
+        except ImportError:
+            pass
+
+    # Set some generic defaults that need to be after the import statments.
+    currentScriptPathObject = pathlib.Path( __file__ ).resolve()
+    currentScriptNameWithoutPath = currentScriptPathObject.name
+    currentScriptNameWithoutPathOrExt = currentScriptPathObject.stem
+    usageHelp = ' Usage: ' + currentScriptNameWithoutPath + ' -h'
+    #Update path of current script.
+    currentScriptPathOnly = str( currentScriptPathObject.parent ) #Does not include last / and this will return one subfolder up if it is called on a folder.
+
+    # Get main program defaults.
+    defaults = getDefaults( )
+    global consoleEncoding
+    consoleEncoding = defaults[ 'consoleEncoding' ]
+    localSystemCacheLocationWindows = os.getenv( 'LOCALAPPDATA' ) + '/' + currentScriptNameWithoutPathOrExt + '/cache'
+    localSystemCacheLocationLinux = commonFunctions.fixPath( '~/.cache/'+ currentScriptNameWithoutPathOrExt + '/cache' )
+
+    # Create and get command line options based on some hardcoded defaults.
+    userInputFromCLI = createAndGetCommandLineOptions( defaults=defaults, usageHelp=usageHelp )
+    if userInputFromCLI[ 'version' ] == True:
+        print( currentScriptNameWithoutPath + ' ' + __version__ ).encode( consoleEncoding )
+        sys.exit( 0 )
+    # Get config.ini input, if any.
+    userInputFromConfig = readConfig( currentScriptNameWithoutPathOrExt + defaults[ 'configFileExtension' ] )
+    if 'program' in userInputFromConfig:
+        if 'version' in userInputFromConfig[ 'program' ]:
+            if userInputFromConfig[ 'program' ][ 'version' ] == True:
+                print( currentScriptNameWithoutPath + ' ' + __version__ ).encode( consoleEncoding )
+                sys.exit( 0 )
+    userInputFromConfig = commonFunctions.fixTypesInConfig( userInputFromConfig ) # modelDatabase is still a string at this point.
+    # Merge CLI input, and config.ini. CLI takes priority.
+    programSettings = merge( userInputFromCLI, userInputFromConfig )
+    # Validate input.
+    programSettings = validateInput( defaults, userInput )
+    consoleEncoding = programSettings[ 'consoleEncoding' ]
+
+    if ( perfMetrics == True ) or ( verbose==True ) or ( debug == True ):
+        #import time                     # Optional library. Used to calculate performance metrics. #Update, processing time should be optionally reported even if verbose==True, so load it if either of those conditions are true. Debug being true implies that verbose is as well. # Update2. Will need to always import time at some point for cache functionality for delaying writing out cache file for at least 30s, ideally 60s.
+        startedLoadingTime = time.perf_counter()
+
+
+    #defaults[ 'modelDatabase' ] = [ 'fairseq.sugoi', 'ctranslate2.sugoi', 'transformers.marianmt' ]
+    # The [ 'modelDatabase' ] list should be turned into a modelDatabase={ } dictionary where each key is a model name mapping to a value. Then, the value should be another dictionary that has these values.
+    # [ 'imported' ]=False, [ 'module' ]=importlib.import_module( 'fully.qualified.path.to.module' ), [ 'model' ]=[ 'module' ].Translator(), [ 'available' ]=False, [ 'hash' ]=None,
+#>>> modelName=[ 'fairseq.sugoi' ]
+#>>> sugoi_module = importlib.import_module( 'resources.engines.'+modelName[ 0 ].split( '.' )[ 0 ]+'.'+ modelName[ 0 ].split( '.' )[ 1 ] )
+#>>> modelDatabase[ modelName ][ 'model' ] = sugoi_module.Translator()
+    modelDatabase = {}
+    # modelName == engine.model as in 'fairseq.sugoi', 'ctranslate2.sugoi', or 'transformers.marianmt'
+    for modelName in programSettings[ 'program' ][ 'modelDatabase' ]:
+        modelDatabase[ modelName ] = { }
+        modelDatabase[ modelName ][ 'name' ] = modelName.split( '.' )[1].strip()
+        modelDatabase[ modelName ][ 'engine' ] = modelName.split( '.' )[0].strip()
+        modelDatabase[ modelName ][ 'imported' ] = False
+        modelDatabase[ modelName ][ 'module' ] = None
+        modelDatabase[ modelName ][ 'model' ] = None #model instance
+        modelDatabase[ modelName ][ 'available' ] = False # available means model is currently available to use. Should only be true for 1 model at a time.
+        modelDatabase[ modelName ][ 'hash' ] = None
+
+        if modelName in programSettings:
+            modelDatabase[ modelName ][ 'model' ][ 'settings' ] = settings[ modelName ]
+            if not 'modelPath' in modelDatabase[ modelName ][ 'model' ][ 'settings' ]:
+                modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'modelPath' ] = None
+            if not 'sourceLanguage' in modelDatabase[ modelName ][ 'model' ][ 'settings' ]:
+                modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'sourceLanguage' ] = None
+            if not 'targetLanguage' in modelDatabase[ modelName ][ 'model' ][ 'settings' ]:
+                modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'targetLanguage' ] = None
+        else:
+            modelDatabase[ modelName ][ 'model' ][ 'settings' ] = { }
+            modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'modelPath' ] = None
+            modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'sourceLanguage' ] = None
+            modelDatabase[ modelName ][ 'model' ][ 'settings' ][ 'targetLanguage' ] = None
+
+    for modelName in modelDatabase:
+        try:
+            modelDatabase[ modelName ][ 'module' ] = importlib.import_module( 'resources.engines.' + modelDatabase[ engine ]+ '.' + modelDatabase[ name ] )
+            modelDatabase[ modelName ][ 'imported' ] = True
+        except:
+            pass
+
+    # Validate logical settings.
+    # Make sure either preloadModel == True and it exists, or at least 1 knownModel imported and when it imported modelPath exists. modelPath does not have to point to a model or a file, but it must point to one or the other since the engine determines if a folder is enough.
+    # if preloadModel is true, then load cache, also start a new worker process by giving it all of the info it needs to start
+
+    # Print information to inform the user and help with debugging. Print it only in main since otherwise it gets printed out a lot.
+    # Always print out mode (fairseq/ctranslate 2)
+    print( 'mode=\''+mode + '\'' )
+    # Always print out device (cpu, cuda, directml)
+    print( 'device=\'' + device + '\'' )
+    # Always print out source language and target language
+    print( ( 'Source Language=\'' + sourceLanguage + '\'' ).encode(consoleEncoding) )
+    print( ( 'Target Language= \''+ targetLanguage + '\'' ).encode(consoleEncoding) )
+
+    if ( verbose == True ) or ( debug == True ):
+    # print out model name and path
+        print( ('inputModelFileNameAndPath=' + str(inputModelFileNameAndPath)).encode(consoleEncoding) )
+    # print out checkpoint file name (if present, only guranteed to be valid for fairseq)
+        print( ('inputModelNameWithoutPath=' + str(inputModelNameWithoutPath) ).encode(consoleEncoding) )
+    # print out model path
+        print( ('inputModelPathOnly=' + str(inputModelPathOnly) ).encode(consoleEncoding) )
+    # print source sentencepiece_model
+        print( ('sourceSentencePieceModel=' + str(sourceSentencePieceModel) ).encode(consoleEncoding) )
+    # print target sentencepiece_model (only for ctranslate 2)
+        print( ('targetSentencePieceModel=' + str(targetSentencePieceModel) ).encode(consoleEncoding) )
+
+    if debug == True:
+        # print out rest of variables
+        print( ('preloadModel=' + str(preloadModel) ).encode(consoleEncoding) )
+        print( ('perfMetrics=' + str(perfMetrics) ).encode(consoleEncoding) )
+        print( ('address=' + str(address) ).encode(consoleEncoding) )
+        print( ('port=' + str(port) ).encode(consoleEncoding) )
+        print( ('version=' + str(version) ).encode(consoleEncoding) )
+        print( ('cacheEnabled=' + str(cacheEnabled) ).encode(consoleEncoding) )
+        print( ('verbose=' + str(verbose) ).encode(consoleEncoding) )
+        print( ('debug=' + str(debug) ).encode(consoleEncoding) )
+        print( ('tornado version=' + str(tornado.version) ).encode(consoleEncoding) )
+        if mode == 'fairseq':
+            print( ('fairseq version=' + str(fairseq.__version__) ).encode(consoleEncoding) )
+        if mode == 'ctranslate2':
+            print( ('ctranslate2 version=' + str(ctranslate2.__version__) ).encode(consoleEncoding) )
+        #if device == 'directml':
+            #print out directML version and torch version. Maybe OS ver as well? Since it has arbitrary requirements.
+
+
+    if cacheEnabled == True:
+        initalizeCache()
+
+
+
+
+
+
+
+
+    if perfMetrics == True:
+        print( 'Load time: ' + str( round(time.perf_counter() - startedLoadingTime, 2) ) + ' seconds' )
+
 
 #    Define v0 API
 #    application = tornado.web.Application([
@@ -1667,21 +1467,28 @@ async def main():
     else:
         application = tornado.web.Application([ (tornado.web.HostMatches( address ), translationAPIv1 ), ])
 
-    print( (currentScriptNameWithoutPath + ' v' + __version__).encode(consoleEncoding) )
-    print( (currentScriptNameWithoutPath + ' ' + mode + ' ' + device + ' started: http://' + str(address) + ':' + str(port) ).encode(consoleEncoding) )
+    print( ( currentScriptNameWithoutPath + ' v' + __version__).encode( consoleEncoding ) )
+    print( ( currentScriptNameWithoutPath + ' ' + mode + ' ' + device + ' started: http://' + str( address ) + ':' + str( port ) ).encode( consoleEncoding ) )
     # if binding to all addresses, then display the connectable addresses for convenience.
     if ( address == '0.0.0.0' ):
         print( 'http://localhost:' + str(port) )
         import socket
-        for i in socket.getaddrinfo(socket.gethostname(),None):
-            #print( 'http://' + str(i[4][0]) + ':' + str(port) )
-            temp=str(i[4][0])
-            # filter out IPv6 addresses
-            if temp.find(':') == -1:
-                print( 'http://' + temp + ':' + str(port) )
+        if sys.platform == 'win32':
+            for i in socket.getaddrinfo( socket.gethostname() ,None ):
+                #print( 'http://' + str(i[4][0]) + ':' + str(port) )
+                temp = str( i[ 4 ][ 0 ] )
+                # filter out IPv6 addresses
+                if temp.find( ':' ) == -1:
+                    print( 'http://' + temp + ':' + str( port ) )
+        else: #Linux
+            # On windows, this prints an error to stderr and stdout returns an array with a single empty string.
+            for i in subprocess.run('hostname -I', shell=True, capture_output='stdout').stdout.decode().strip().split(' '):
+                if i.strip() == '':
+                    continue
+                print( 'http://' + i.strip() + ':' + str( port ) )
 
     # Update this with: https://www.tornadoweb.org/en/stable/netutil.html Done.
-    application.listen(address=address, port=port)
+    application.listen( address=address, port=port )
 
     global uiHandle
     uiHandle=None
@@ -1692,12 +1499,9 @@ async def main():
 
     await asyncio.Event().wait()
 
+
 if __name__ == '__main__':
-
-    if perfMetrics == True:
-        print( 'Load time: ' + str( round(time.perf_counter() - startedLoadingTime, 2) ) + ' seconds' )
-
-#    try:
+    multiprocessing.freeze_support()
     try:
         asyncio.run( main() )
     except KeyboardInterrupt:
@@ -1710,14 +1514,14 @@ if __name__ == '__main__':
     if psutilAvailable == True:
         #Only psutil works as intended to close the UI.
         try:
-            for process in psutil.Process(os.getpid()).children(recursive=True):
-                #process.send_signal(signal.SIGTERM)
+            for process in psutil.Process( os.getpid() ).children( recursive=True ):
+                #process.send_signal( signal.SIGTERM )
                 process.terminate() #Mostly an alias for above code.
             if verbose == True:
-                print('Info: Child processes found and sent signal.SIGTERM.')
+                print( 'Info: Child processes found and sent signal.SIGTERM.' )
         except psutil.NoSuchProcess:
             if verbose == True:
-                print('No child processeses.')
+                print( 'No child processes.' )
     else:
         # This must be below the psutil code that closes subprocesses or the linking process will not exist for psutil to use. See:
         # https://psutil.readthedocs.io/en/latest/#psutil.Process.children
@@ -1726,19 +1530,15 @@ if __name__ == '__main__':
             #uiHandle.send_signal(signal.SIGTERM)
             uiHandle.terminate() #This is an alias for the above command but with cross platform support.
 
-
     if (mode == 'fairseq') and (device == 'cpu'):
         #print('pie',flush=True)
-        psutilAvailable=False
+        #psutilAvailable = False
         if psutilAvailable == True:
             #print('pie2', flush=True)
-            psutil.Process(os.getpid()).send_signal(signal.SIGTERM) # Suicide. The safer way.
+            psutil.Process( os.getpid() ).send_signal( signal.SIGTERM ) # Suicide. The safer way.
         elif psutilAvailable != True:
             #print('pie3', flush=True)
-            os.kill(os.getpid(),signal.SIGTERM) # Suicide.
+            os.kill( os.getpid(),signal.SIGTERM ) # Suicide.
 
-    sys.exit('Program crashed successfully.')
-
-    # Might be useful: https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process.terminate
-    # This seems to only be useful when constructing the process manually. Might still be useful if the multiprocessing code is updated to remove the psutil requirement, but that does not remove the psutil requirement from the HTTP API's shutdown command that is responsible for doing the same thing. In other words, meh. Just do nothing instead. TODO: Double check if this is still true.
-
+    print( 'Program crashed successfully.' )
+    sys.exit( 0 )

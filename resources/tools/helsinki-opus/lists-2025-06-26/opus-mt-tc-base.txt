@@ -1,0 +1,14 @@
+Helsinki-NLP/opus-mt-tc-base-en-sh
+Helsinki-NLP/opus-mt-tc-base-tr-uk
+Helsinki-NLP/opus-mt-tc-base-ro-uk
+Helsinki-NLP/opus-mt-tc-base-hu-uk
+Helsinki-NLP/opus-mt-tc-base-fi-uk
+Helsinki-NLP/opus-mt-tc-base-ces_slk-uk
+Helsinki-NLP/opus-mt-tc-base-bat-zle
+Helsinki-NLP/opus-mt-tc-base-zle-bat
+Helsinki-NLP/opus-mt-tc-base-uk-tr
+Helsinki-NLP/opus-mt-tc-base-uk-ro
+Helsinki-NLP/opus-mt-tc-base-uk-fi
+Helsinki-NLP/opus-mt-tc-base-uk-hu
+Helsinki-NLP/opus-mt-tc-base-uk-ces_slk
+Helsinki-NLP/opus-mt-tc-base-gmw-gmw

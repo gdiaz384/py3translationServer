@@ -1,0 +1,18 @@
+html { 
+    color: turquoise;
+    background-color: rgb( 15 15 15 );
+    background-image : url( '/img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png' ); }
+a { color: turquoise; }
+input {
+    color: turquoise;
+    background-color: rgb( 15 15 15 ); }
+textarea {
+    color: turquoise;
+    background-color: rgb( 15 15 15 ); }
+select {
+    color: turquoise;
+    background-color: rgb( 15 15 15 ); }
+button {
+    color: turquoise;
+    background-color: rgb( 15 15 15 ); }
+

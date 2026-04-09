@@ -1,0 +1,11 @@
+Helsinki-NLP/opus-tatoeba-it-he
+Helsinki-NLP/opus-tatoeba-he-it
+Helsinki-NLP/opus-tatoeba-he-fr
+Helsinki-NLP/opus-tatoeba-fr-it
+Helsinki-NLP/opus-tatoeba-fi-en
+Helsinki-NLP/opus-tatoeba-es-zh
+Helsinki-NLP/opus-tatoeba-en-tr
+Helsinki-NLP/opus-tatoeba-en-ro
+Helsinki-NLP/opus-tatoeba-en-ja
+Helsinki-NLP/opus-tatoeba-de-ro
+Helsinki-NLP/opus-tatoeba-af-ru

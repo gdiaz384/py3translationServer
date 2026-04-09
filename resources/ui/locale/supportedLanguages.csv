@@ -1,0 +1,25 @@
+iso639-3 code,iana registry code,Glottocode,In English,Native
+amh,am,amha1245,Amharic,አማርኛ
+ara,ar,stan1318,Arabic,العربية
+ben,bn,beng1280,Bengali,বাঙ্গালি
+cmn,zh,mand1415,Chinese (Mandarin),中文 (官话)
+deu,de,stan1295,German,Deutsch
+eng,en,stan1293,English,English
+fra,fr,stan1290,French,Français
+hau,ha,haus1257,Hausa,Hausa
+heb,he,hebr1245,Hebrew,טלוגו
+hin,hi,hind1269,Hindi,आधुनिक मानक हिन्दी
+ind,id,indo1316,Indonesian,Indonesia
+ita,it,ital1282,Italian,Italiano
+jpn,ja,nucl1643,Japanese,日本語
+mar,mr,mara1378,Marathi,मराठी
+pcm,pcm,nige1257,Nigerian Creole,Pidgin Nigeria
+por,pt,port1283,Portuguese,Português
+rus,ru,russ1263,Russian,Русский
+spa,es,stan1288,Spanish,Español
+swh,swh,swah1253,Swahili,Kiswahili
+tel,te,telu1262,Telugu,తెలుగు
+tur,tr,nucl1301,Turkish,Türkçe
+ukr,uk,ukra1253,Ukrainian,Суахілі
+urd,ur,urdu1245,Urdu,اردو
+vie,vi,viet1252,Vietnamese,Tiếng Việt

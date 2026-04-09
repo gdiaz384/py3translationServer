@@ -1,0 +1,12 @@
+modelName,modelPath,sourceLanguages,targetLanguages,sourceLanguage,targetLanguage,modelURL,description,prependTargetLanguage
+opus-tatoeba-af-ru,Helsinki-NLP/opus-tatoeba-af-ru,afr,rus,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-af-ru,"af-ru, source group: Afrikaans, target group: Russian NMT model.",False
+opus-tatoeba-de-ro,Helsinki-NLP/opus-tatoeba-de-ro,deu,mol ron,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-de-ro,"de-ro, source group: German, target group: Romanian NMT model.",True
+opus-tatoeba-en-ja,Helsinki-NLP/opus-tatoeba-en-ja,eng,jpn,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja,"en-ja, source group: English, target group: Japanese NMT model.",False
+opus-tatoeba-en-ro,Helsinki-NLP/opus-tatoeba-en-ro,eng,mol ron,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ro,"en-ro, source group: English, target group: Romanian NMT model.",True
+opus-tatoeba-en-tr,Helsinki-NLP/opus-tatoeba-en-tr,eng,tur,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-tr,"en-tr, source group: English, target group: Turkish NMT model.",False
+opus-tatoeba-es-zh,Helsinki-NLP/opus-tatoeba-es-zh,spa,cjy_Hans cjy_Hant cmn cmn_Hans cmn_Hant hsn hsn_Hani lzh nan wuu yue_Hans yue_Hant,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-es-zh,"es-zh, source group: Spanish, target group: Chinese NMT model.",True
+opus-tatoeba-fi-en,Helsinki-NLP/opus-tatoeba-fi-en,fin,eng,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-fi-en,"fi-en, source group: Finnish, target group: English NMT model.",False
+opus-tatoeba-fr-it,Helsinki-NLP/opus-tatoeba-fr-it,fra,ita,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-fr-it,"fr-it, source group: French, target group: Italian NMT model.",False
+opus-tatoeba-he-fr,Helsinki-NLP/opus-tatoeba-he-fr,heb,fra,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-he-fr,"he-fr, source group: Hebrew, target group: French NMT model.",False
+opus-tatoeba-he-it,Helsinki-NLP/opus-tatoeba-he-it,heb,ita,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-he-it,"he-it, source group: Hebrew, target group: Italian NMT model.",False
+opus-tatoeba-it-he,Helsinki-NLP/opus-tatoeba-it-he,ita,heb,,,https://huggingface.co/Helsinki-NLP/opus-tatoeba-it-he,"it-he, source group: Italian, target group: Hebrew NMT model.",False

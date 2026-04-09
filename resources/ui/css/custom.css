@@ -1,0 +1,210 @@
+/* Load dark by default. This needs to be loaded via script because otherwise the screen will flash white-black when reloading the page depending upon user settings and the default. The theme needs to be correct as it loads to prevent strobing. */
+/* background -color, text color */
+/*
+html { 
+    color: turquoise;
+    background-color: rgb(15 15 15 );
+    background-image: url( 'img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png' ); 
+    background-repeat: no-repeat; }
+a { color: turquoise; }
+input {
+    color: magenta;
+    background-color: green; }
+textarea {
+    color: magenta;
+    background-color: pink; }
+select {
+    color: magenta;
+    background-color: orange; }
+button {
+    color: pink;
+    background-color: yellow; }
+*/
+
+/*
+backgroundColor = 'rgb( 10 10 10 )'
+primaryColor = 'rgb( 10 10 10 )'
+textColor = 'rgb( 200, 200, 200 )' */
+
+/*
+html { 
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+a { color: rgb( 200, 200, 200 ); }
+input {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+textarea {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+select {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); }
+button {
+    color: rgb( 200, 200, 200 );
+    background-color: rgb( 10 10 10 ); } */
+
+/* This affects the background color of selected text which is unpredictable otherwise. */
+::-moz-selection { background: grey; }
+::selection { background: grey; }
+
+body {
+    /*outline: 1px solid red; */ }
+.page {
+    /*background-color: rgb(000 000 000);
+    color: rgb(255 255 255);*/
+    width: 100%;
+    height: 100%;
+    /*border: 2px solid rgb(0 255 255); */ }
+
+h2 { display: inline; }
+
+#mainContent > div { border: 2px solid rgb(25 25 25); }
+
+textarea {
+    /*background-color: rgb(000 000 000);
+    color: rgb(255 255 255);*/ }
+
+/*#engineSearch*/
+select {
+    text-align: justify;
+    text-align-last: center;
+    /*background-color: rgb( 000 000 000);*/
+    /*color: rgb( 255 255 255); */
+    width:80px;
+    }
+
+.topBar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    border: 2px solid rgb(25 25 25);
+    /*height: 30px; works*/
+    /*background-color: rgb(255 255 255 / 0.1);*/ }
+.topBarCenter {
+    display: flex;
+    justify-content: center;
+    /*position: absolute;*/
+    text-align: center; }
+.topBarCenter { display: none }
+.topBarCenter2 {
+    /*background-color: #ccc;*/
+    display: flex;
+    position: absolute;
+    justify-content: center;
+    /*width: 99%;*/
+    /*width:99;*/
+    /*justify-content: center;*/
+    /*position: absolute;*/
+    margin: auto;
+    /*top: -50;
+    bottom: 1;*/
+    right: 0;
+    left: 0;
+    width: 180px;
+    height: 20px;
+    border-radius: 3px;
+    /*width: 100%;*/
+    /*z-index: 0;*/
+    text-align: center; }
+.topBar > div#themes{
+    /*border: 2px solid rgb(96 139 168);
+    color: rgb(255 000 000); */ }
+.topBar > div#languages{
+    /*border: 2px solid rgb(96 139 168);
+    color: rgb(255 000 000);
+    background-color: rgb(000 000 000); */
+    /*width:10%;*/ }
+
+#content {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center; }
+
+#search {
+    display: flex;
+    justify-content: center;
+    flex: 20%;
+    /*border: 2px dotted rgb(96 139 168); */
+    /*padding-top:1%;*/
+    /*width: 18%;*/ }
+#search > div > * {
+    justify-content: center;
+    text-align: center;
+    border-radius: 15px;
+    /*border: 2px solid rgb(96 139 168);
+    background-color: rgb(96 139 168 / 0.2); */
+    width: 100%; }
+#search > div > div > #searchResults {
+    justify-content: center;
+    text-align: center;
+    /*border: 2px solid rgb(96 139 168);*/
+    /*background-color: rgb(96 139 168 / 0.2);*/
+    width: 100%; }
+#searchResults > div {
+    padding: 4px;
+}
+
+#searchMainSidebarDiv { border: 2px solid rgb(25 25 25); }
+
+#mainContent {
+    flex-wrap: wrap;
+    flex: 80%;
+    /*border: 3px dotted rgb(96 139 168); */
+    /*width: 78%*/; }
+#mainContent > div {
+    display: flex;
+    justify-content: center;
+    /*border: 1px solid rgb(96 139 168);*/ }
+
+#requestOptions {
+    display: flex;
+    flex-wrap: wrap;
+    /*flex-direction: row;*/
+    /*justify-content: start; */
+    justify-content: center; }
+
+#requestOptions > div {
+    padding-right: 14px;
+    /*border: 1px solid rgb(96 139 168);*/ }
+#requestOptions > #customLabelDiv {
+    padding-right: 2px;
+    padding-top: 5px; }
+
+#requestOptions > div > input {
+    width: 72px; }
+
+#metadataDisplay > div {
+    /*display: relative; invalid CSS value*/
+    /*background-color: rgb( 000 255 00);*/
+    padding: 10px;
+    /*border: 1px solid rgb(254 139 255); */ }
+#metadataDisplay > div > div {
+text-align: center; }
+#metadataDisplay > span {
+text-align: center; }
+
+#busySymbol {
+    position: absolute; 
+    width: 50px;
+    height: auto;
+    visibility: hidden;
+    animation: spin 10s linear infinite; }
+@keyframes spin {
+    from { transform: rotate( 0deg ); }
+    to { transform: rotate( 359deg ); }
+}
+
+#bottomBar { border: 2px solid rgb(25 25 25); }
+
+.stack { display: grid; }
+.stack > * { grid-area: 1/1; }
+.hide { visibility: hidden; }
+
+/* https://www.w3schools.com/css/tryit.asp?filename=trycss3_flexbox_responsive */
+@media (max-width: 750px) {
+    .content { flex-direction: column; }
+    .topBarCenter { display: flex; }
+    .topBarCenter2 { display:none; }
+}

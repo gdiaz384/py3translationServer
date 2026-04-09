@@ -1,0 +1,2 @@
+Helsinki-NLP/fin-simple-mBART
+Helsinki-NLP/simple-finnish-gpt3-xl

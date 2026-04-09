@@ -32,7 +32,7 @@ py3translationServer is an HTTP fontend for [fairseq](//github.com/facebookresea
     - OS/X, BSD, Android, IOS are not officially supported but might work regardless.
 - Makes comparing different NMT models easier.
 - Makes comparing fairseq and CTranslate2's various supported devices easier, especially on different hardware and also with different versions of fairseq, CTranslate2, and PyTorch.
-- Supports fully asyncronous multiprocessing and asyncronous multithreading for non-blocking network I/O.
+- Supports asyncronous multithreading, asyncronous multiprocessing, and non-blocking network I/O.
 
 ## Planned:
 

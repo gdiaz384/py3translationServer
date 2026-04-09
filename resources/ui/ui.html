@@ -1,0 +1,1678 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>py3translationServer UI</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+<!--<link href="css/jquery-ui.theme.base.css" rel="stylesheet">-->
+<!--<link href="css/custom.css" rel="stylesheet">-->
+
+<!-- This loads the responsive design implemented via flexboxes. -->
+<link href="css/custom.css" rel="stylesheet">
+<!-- Load dark by default. This needs to be loaded asap because otherwise the screen will flash white-black when reloading the page depending upon user theme settings and the conflict with the default or no theme. The theme needs to be correct from the start as it loads to prevent strobing. Any changes to the default theme should also occur right away. -->
+<!--<link href='css/dark.css' rel='stylesheet' id='stylesheet'/> -->
+<!-- stub link for stylesheet-->
+<link rel='stylesheet' id='stylesheet'/>
+<link rel='stylesheet' id='stylesheet2'/> <!-- A duplicate is necessary because JS is a terrible language. -->
+
+<!--<script type='text/javascript' src='js/jquery.js'></script>-->
+
+<script>
+// This has an issue where the transition between the old stylesheet and the new stylesheet is not atomic. When loading a page initially, this works as expected because the stylesheet loads prior to content getting defined. However, when changing between one stylesheet and another, the old style will first be removed which causes all elements to change style to no stylesheet, e.g. 'None2'. Then once the server eventually returns the request for the new stylesheet 1ms later, the browser will update the styles again. This causes a strobing effect. To mitigate this:
+// Transfer the contents of the main/old stylesheet to a temporary empty placeholder that occurs after it.
+// After the server returns the stylesheet, update the main stylesheet with the updated value.
+// And then update the placeholder to match the updated main stylesheet.
+// Did not work. Javascript is fully async. Instead of updating the linked stylesheet, it just removed them both, produced the strobing effect, and moved on. So force it to wait before updating the second stylesheet to give the initial request time to actually return. Why does JS insist on doing things half-baked?
+function fixTheme( theme='None', init=false ) {
+    //console.log( 'theme' )
+    //console.log( theme )
+    //console.log( 'init' )
+    //console.log( init )
+
+    //handleChangeTheme( 'dark' )
+    // Load selected theme from localStorage.
+    if ( theme == 'None' )
+        theme = localStorage.getItem( 'theme' )
+    //console.log( theme )
+    if ( theme != null ) {
+        //$( '#stylesheet2' ).attr( 'href', $( '#stylesheet' ).attr( 'href' ) )
+        document.getElementById( 'stylesheet2' ).href = document.getElementById( 'stylesheet' ).href
+
+        //$( '#stylesheet' ).attr( 'href', '/css/'+ theme +'.css' )
+        document.getElementById( 'stylesheet' ).href = '/css/' + theme + '.css'
+    }
+    else {
+        theme = 'dark'
+        //$( '#stylesheet' ).attr( 'href', '/css/dark.css' )
+        document.getElementById( 'stylesheet' ).href = '/css/dark.css'
+    }
+    if ( init == false )
+        // Since page rendering continues during this timeout, this will cause strobing during the inital page load but prevent if afterwards.
+        //{ window.setTimeout( function() { $( '#stylesheet2' ).attr( 'href', '/css/'+ theme +'.css' ) }, 300 ) }
+        { window.setTimeout( function() { document.getElementById( 'stylesheet2' ).href = '/css/' + theme + '.css' }, 300 ) }
+    else
+        //{ $( '#stylesheet2' ).attr( 'href', '/css/'+ theme +'.css' ) }
+        { document.getElementById( 'stylesheet' ).href = '/css/' + theme + '.css' }
+    localStorage.setItem( 'theme', theme )
+}
+fixTheme( theme='None', init=true ) //Always position all function parameters correctly, or else.
+//fixTheme( init=true ) // This function invocation will pass theme=true, init=undefined to fixTheme(), as insane as that is. Javascript does not respect named parameters apparently.
+//fixTheme( init=true,  theme='None' ) //Same as above. Javascript will pass this as theme=true, init='None'. Pure insanity.
+</script>
+
+
+
+<!--
+<script>
+window.tags = [ 'html', 'a', 'input', 'textarea', 'select', 'button' ]
+function changeTheme( backgroundColor=null, primaryColor=null, textColor= null, mikuMode=false ){
+    for ( tag of window.tags ) {
+        if ( tag != 'a' )
+            { $( tag ).css( 'background-color', backgroundColor ) }
+        $( tag ).css( 'color', textColor ) 
+    }
+    // background-image: url( 'img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png' ); 
+    // background-repeat: no-repeat;
+    if ( mikuMode == true) {
+        $( 'html' ).css( 'background-image', 'url( \'img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png\' )' )
+        //$( 'html' ).css( 'background-repeat', 'no-repeat' )
+    }
+    else {
+        $( 'html' ).css( 'background-image', '' )
+        $( 'html' ).css( 'background-repeat', '' )
+    }
+}
+
+function handleChangeTheme( theme='None' ) {
+    if ( theme == 'None' )
+        { theme = $( '#themes' ).val() }
+    //console.log( 'theme' )
+    //console.log( theme )
+    if ( theme == 'None' )
+        { return }
+    // console.log( 'a' + null ) // Will print out 'anull'.
+    backgroundColor = null
+    primaryColor = null
+    textColor = null
+    mikuMode = false
+
+    if ( theme == 'None2' ) {
+    backgroundColor = ''
+    primaryColor = ''
+    textColor = ''
+    }
+    else if ( theme == 'highContrastWhite' ) {
+        backgroundColor = 'white'
+        primaryColor = 'white'
+        textColor = 'black'
+    }
+    else if ( theme == 'highContrastBlack' ) {
+        backgroundColor = 'black'
+        primaryColor = 'black'
+        textColor = 'white'
+    }
+    else if ( theme == 'dark' ) {
+        backgroundColor = 'rgb( 10 10 10 )'
+        primaryColor = 'rgb( 10 10 10 )'
+        textColor = 'rgb( 200, 200, 200 )'
+    }
+    else if ( theme == 'miku' ) {
+        backgroundColor = 'rgb( 15 15 15 )'
+        primaryColor = 'rgb( 15 15 15 )'
+        textColor = 'turquoise'
+        mikuMode = true
+    }
+    changeTheme(backgroundColor=backgroundColor, primaryColor=primaryColor, textColor=textColor, mikuMode=mikuMode)
+
+    // Save selected theme in localStorage for convenience.
+    themeTemp = localStorage.getItem( 'theme' )
+    if ( themeTemp != theme )
+        { localStorage.setItem( 'theme', theme ) }
+}
+
+function fixTheme() {
+    //handleChangeTheme( 'dark' )
+    // Load selected theme from localStorage.
+    theme = localStorage.getItem( 'theme' )
+    if ( theme != null )
+        { handleChangeTheme( theme ) }
+    else
+        { handleChangeTheme( 'dark' ) }
+}
+fixTheme()
+
+</script>
+
+-->
+</head>
+<body>
+
+<div class='page'>
+<div class='topBarCenter'>
+    <!--style='z-index:2'-->
+    <div class='pageTitle' >py3translationServer UI</div>
+</div>
+<div class='topBar'>
+    <div class='topBarCenter2'>
+        <!--style='z-index:2'-->
+        <div class='pageTitle2' >py3translationServer UI</div>
+    </div>
+    <div id='searchGlotto'><a href='//glottolog.org/glottolog' target='_'><span id='searchLanguageCodesLabel'>Search codes</span></a></div>
+    <div>
+        <select name='themes' id='themes'>
+            <option value='None' id='themesLabel'>Themes</option>
+            <option value='None2' class='noneOptionLabel'>None</option>
+            <option value='highContrastWhite' id='highContrastWhiteLabel'>High contrast white</option>
+            <option value='highContrastBlack' id='highContrastBlackLabel'>High contrast black</option>
+            <option value='dark' id='darkLabel'>Dark</option>
+            <option value='miku' id='mikuLabel'>Miku</option>
+        </select>
+    </div>
+    <div>
+        <select name='uiLanguage' id='uiLanguage'>
+            <option value='None' id='languagesLabel'>Language</option>
+        </select>
+    </div>
+    <div>
+        <select name='uiMode' id='uiMode'>
+            <option value='None' id='uiModeLabel'>UI mode</option>
+            <option value='simple' id='uiModeSimpleLabel'>Simple</option>
+            <option value='advanced' id='uiModeAdvancedLabel'>Advanced</option>
+        </select>
+    </div>
+</div>
+
+<div id='content'>
+<div id='search'>
+    <div id='searchMainSidebarDiv'>
+        <div><h2>1. </h2><h2 id='searchModelsLabel'>Search Models</h2></div>
+        <div>
+            <label for='engineSearch' class='label' id='engineSearchLabel'><span class='byLabel'>By</span> engine</label>
+            <br/>
+            <select name='engineSearch' id='engineSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <label for='modelGroupSearch' class='label' id='modelGroupSearchLabel'><span class='byLabel'>By</span> modelGroup</label>
+            <br/>
+            <select name='modelGroupSearch' id='modelGroupSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <label for='modelNameSearch' class='label' id='modelNameSearchLabel'><span class='byLabel'>By</span> modelName</label>
+            <br/>
+            <select name='modelNameSearch' id='modelNameSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <label for='sourceLanguageSearch' class='label' id='sourceLanguageSearchLabel'><span class='byLabel'>By</span> sourceLanguage</label>
+            <br/>
+            <select name='sourceLanguageSearch' id='sourceLanguageSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <label for='targetLanguageSearch' class='label' id='targetLanguageSearchLabel'><span class='byLabel'>By</span> targetLanguage</label>
+            <br/>
+            <select name='targetLanguageSearch' id='targetLanguageSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <label for='deviceSearch' class='label' id='deviceSearchLabel'><span class='byLabel'>By</span> device</label>
+            <br/>
+            <select name='deviceSearch' id='deviceSearch'>
+                <option value='None'>None</option>
+            </select>
+        </div>
+        <div>
+            <h2>2. </h2><h2 id='selectAModelLabel'>Select a Model</h2>
+        </div>
+        <!-- <div id='searchResults'></div> -->
+        <div id='searchResults'>
+<!--            <div><button>1</button></div>
+            <div><button>2</button></div>
+            <div><button>3</button></div> -->
+        </div>
+    </div> <!-- closes div that contains each element for left search pane -->
+</div> <!-- closes search -->
+
+<div id='mainContent'>
+<div id='selectModelOptionsDiv'>
+    <h2>3. </h2>
+    <h2 id='selectModelOptionsLabel'>Select Model Options</h2>
+</div>
+<div id='requestOptions'>
+    <div id='customLabelDiv'>
+    <br/>
+    <br/>
+    <span id='customLabel'>Custom</span><!--
+    --><span>:</span>
+    </div>
+    <div>
+        <label for='engine' class='label' id='engineLabel'>engine</label>
+        <br/>
+        <select name='engine' id='engine'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='engineCustom'/>
+    </div>
+    <div>
+        <label for='modelGroup' class='label' id='modelGroupLabel'>modelGroup</label>
+        <br/>
+        <select name='modelGroup' id='modelGroup'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='modelGroupCustom'/>
+    </div>
+    <div>
+        <label for='modelName' class='label' id='modelNameLabel'>modelName</label>
+        <br/>
+        <select name='modelName' id='modelName'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='modelNameCustom'/>
+    </div>
+    <div>
+        <label for='sourceLanguage' class='label' id='sourceLanguageLabel'>sourceLanguage</label>
+        <br/>
+        <select name='sourceLanguage' id='sourceLanguage'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='sourceLanguageCustom'/>
+    </div>
+    <div>
+        <label for='targetLanguage' class='label' id='targetLanguageLabel'>targetLanguage</label>
+        <br/>
+        <select name='targetLanguage' id='targetLanguage'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='targetLanguageCustom'/>
+    </div>
+    <div>
+        <label for='device' class='label' id='deviceLabel'>device</label>
+        <br/>
+        <select name='device' id='device'>
+            <option value='None'>None</option>
+        </select>
+        <br/>
+        <input type='text' id='deviceCustom'/>
+    </div>
+</div> <!-- close requestOptions -->
+
+<!--    <div style='padding: 10px'>-->
+    <div id='metadataDisplay'>
+        <div>
+            <div class='stack'>  <!--style='text-align:center'-->
+                <!--<span id='modelNameDisplayLabel'>ModelName:</span>-->
+                <span id='modelNameDisplayLabel'>No model selected.</span>
+                <span id='modelNameDisplay' class='hide'>No model selected.</span>
+            </div>
+            <div>
+            <span id='modelSourceLanguagesLabel'>sourceLanguages</span><!--
+            --><span>:</span>
+            <span id='modelSourceLanguages'>None</span>
+            </div>
+            <div>
+            <span id='modeltargetLanguagesLabel'>targetLanguages</span><!--
+            --><span>:</span>
+            <span id='modelTargetLanguages'>None</span>
+            </div>
+            <div>
+            <span id='modelDescriptionLabel'>Description</span><!--
+            --><span>:</span>
+            <span id='modelDescription'>None</span>
+            </div>
+            <div>
+            <span id='modelURLsLabel'>More information</span><!--
+            --><span>:</span>
+            <span id='modelURLs'>None</span>
+            </div>
+        </div>
+    </div>
+    <div>
+        <h2>4. </h2><h2 id='enterSourceText'>Enter Source Text</h2><h2>:</h2>
+    </div>
+    <div>
+        <form action='' accept-charset='utf-8' method="post" name='sourceTextForm' id='sourceTextForm' class='sourceTextForm'>
+        <!-- https://www.w3schools.com/tags/tag_textarea.asp -->
+        <!--<input type="checkbox" name="removeLinesCheckbox2" checked>-->
+        <!-- style='visibility: hidden ' -->
+        <textarea id='sourceTextArea' rows="10" cols="42" autofocus required form="sourceTextForm" placeholder="Source Text"></textarea>
+        <!-- <input type="text" id="rawtext">--> <br/>
+
+        </form>
+    </div>
+    <div> 
+        <span>5.</span>
+        <button id='translateButton'>Translate</button>
+        <input type='checkbox' name='removeLinesCheckbox' id='removeLinesCheckbox' checked></input>
+        <label for='removeLinesCheckbox' id='removeLinesCheckboxLabel'>Remove Empty Lines</label>
+
+</div>
+    <div id='results' style='visibility: hidden'>
+        <img id='busySymbol' src='/img/busySymbol.png' alt='busySymbol' />
+        <textarea rows="2" cols="42" disabled id="translationTextArea" readonly form="source" placeholder="Translation"></textarea>
+
+        <!--<blockquote class="translationResult">abc</blackquote>-->
+    </div>
+    <div>
+        <button style='visibility: hidden' id="copyToClipboardButton">Copy</button>
+        <span id='afterCopyToClipboardButton'></span>
+        <span id='afterCopyToClipboardButtonLabel' class='hide'>Copied!</span>
+        <!--<span>!</span>-->
+    </div>
+</div>
+
+</div> <!-- closes content -->
+<div id="bottomBar">
+    <span id='severIDLabel'>Connected</span><!--
+    --><span>: </span>
+    <span id='serverID'>None</span><!--
+    --><span>;</span>
+    <span id='defaultModelLabel'>Default engine/model</span><!--
+    --><span>: </span>
+    <span id='defaultModel'>unknown</span><!--
+    --><span>;</span>
+    <span id='activeModelLabel0'>Active Model</span><!--
+    --><span id='activeModelLabel1'>:</span>
+    <span id='activeModel'></span>
+</div> <!-- Closes bottomBar. -->
+</div> <!-- Closes page. -->
+
+
+<!--<script type="text/javascript" src="js/jquery.js"></script>-->
+<script type='text/javascript' src='js/jquery.js'></script>
+<!--<script type="text/javascript" src="js/jquery-ui.js"></script>-->
+<script>
+    window.__modules__ = { }
+    window.__staticVariables__ = { }
+</script>
+<script type="module">
+    import { parse } from '/js/csvParser.js'
+    window.__modules__.csvParser = parse
+</script>
+
+
+<!--
+$( this ).hide() - hides the current element.
+$( 'p' ).hide() - hides all <p> elements.
+$( '.test' ).hide() - hides all elements with class='test'.
+$( '#test' ).hide() - hides the element with id='test'.
+
+numbers = [ 0, 1, 2, 3 ]
+// Option 1:
+for (var i = 0; i < numbers.length ; i++) { console.log( i ) }
+#Option 2:
+for (x of numbers) {
+    console.log( x )
+    }
+// Option 3, if needing a counter:
+for ( [ counter, x]  of [ 'a', 'b', 'c' ].entries() ) {
+    console.log( counter, x )
+    }
+if ( x != undefined ) { console.log( x ) }
+
+// check if item in array
+numbers.includes( 0 )
+
+fruits = [ 'Banana ', ' Orange', 'Ap ple', ,' ','Mango' ]
+for ( [ counter, x ] of fruits.entries() ) {
+	if ( ( x != undefined ) && ( x.trim() != '' ) )
+        { string += counter + ':' + x + '_' }
+    if (x == undefined)
+        { console.log( counter + ' is undefined' ) }
+    else if ( x.trim() == '' )
+        { console.log( counter + ' is an empty string' ) }
+}
+// string becomes 0:Banana _1: Orange_2:Ap ple_5:Mango_
+// and console will print '3 is undefined' and '4 is an empty string'
+
+person = {
+    name: 'John',
+    age: 30,
+    city: 'New York',
+    };
+text = '';
+for (x in person ) {
+    text += x + person[ x ] + ' ';
+    };
+//prints nameJohn_age30_cityNew York_
+//Conclusion: lists should use 'of' like ( x of list ), but dictionaries/objects should use 'in' like ( x in myDictionary ).
+
+//check if key in dictionary
+person.hasOwnProperty( 'name' )
+
+-->
+
+<script>
+// Forms like input boxes, textArea, and select boxes get defined above and have no theme information yet which means browsers may default to a white background color. The default theme is dark. If applying a theme is delayed, then those items will produce a strobing effect when they load from the color change. One solution is to apply the theme as soon as possible both before and after those items get defined to ensure a uniform color scheme. The same is true for whenever objects like the above are created dynamically, including links. There is probably a better way to do this than using JQuery to adjust the css of all of the items, like adjusting which external stylesheet loads from the server, but this works for now.
+//fixTheme()
+
+// Define helper functions.
+// print() is apparently a predefined js function that tries to send the DOM to a printer. This function overrides that insane behavior.
+function print( x )
+    { console.log( x ) }
+
+function type( x )
+    { return typeof( x ) }
+
+function bool( x ) {
+    if ( x == true )
+        { return true }
+    else if ( x == false )
+        { return false }
+    else if ( x == 'on' )
+        { return true }
+    else if ( x == 'off' )
+        { return false }
+    else if ( x == '0' )
+        { return true }
+    else if ( x == '1' )
+        { return false }
+    else if ( x == 0 )
+        { return true }
+    else if ( x == 1 )
+        { return false }
+    else if ( x == undefined )
+        { return false }
+    else if ( x == null )
+        { return false }
+    return null
+}
+
+function assert( condition, errorMessage=undefined ) {
+    if ( !condition ) {
+        if ( errorMessage == undefined )
+            { throw new Error( 'assertion failed: ' + condition ) }
+        else
+            { throw new Error( errorMessage ) }
+    }
+}
+
+// In JS string.split( delimiter , number ) the number is the maximum number of elements that should be in the final array. If the number of values generated by the delimiter exceeds this amount, then the rest will be truncated.
+// In the Python version of split, maxSplit specifies the maximum number of times the string should be split, which is more useful. A maxSplit of == 1 will return a list with 2 items. maxSplit == 2 can return up to 3 items. 
+function pythonSplit( string, delimiter=' ', maxSplit=1 ) {
+    if ( ( type( string ) == type( undefined ) ) || ( string == null ) )
+        { return null }
+    if ( ( type( delimiter ) == type( undefined ) ) || ( delimiter == null ) )
+        { return null }
+    if ( delimiter == '' )
+        { return null }
+    tempList = string.split( delimiter )
+    newList = [ ]
+    //for ( item of tempList)
+    for ( [ counter, item ] of tempList.entries() ) {
+        newList.push( item )
+        // Put any remaining items in tempList into a string with the delimiter in between each item, and then push that string onto newList.
+        if ( counter + 1 == maxSplit ) {
+            tempString = ''
+            for ( [ counter2, item2 ] of tempList.entries() ) {
+                if ( counter2 < maxSplit )
+                    { continue }
+                tempString += item2 + delimiter
+            }
+            tempString = tempString.slice( 0, tempString.length -1 ) // Cut off the final delimiter.
+            newList.push( tempString )
+            break
+        } //end if
+    } //end for tempList
+    return newList
+}
+
+// This only works for strings.
+function stringHasValue( x ) {
+    if ( type( x ) == type( undefined ) )
+        { return false }
+    if ( x.trim() == '' )
+        { return false }
+    if ( x.trim().toLowerCase() == 'none' )
+        { return false }
+    return true
+}
+
+function getOptionsValue( selectableOption, optionCustom ) {
+    if ( stringHasValue( optionCustom ) == true )
+        { return optionCustom.trim() }
+    else if ( stringHasValue( selectableOption ) == true )
+        { return selectableOption.trim() }
+    else
+        { return '' }
+}
+
+function hidePTags()
+    { $( 'p' ).hide() }
+
+function hideDivTags()
+    { $( 'div' ).hide() }
+
+function showResultTextArea() {
+    $( '#results' ).css( 'visibility', 'visible' )
+    $( '#results > textarea' ).attr( 'rows', '10' )
+    $( '#results > textarea' ).removeAttr( 'disabled' )
+    $( '#copyToClipboardButton').css( 'visibility', 'visible' )
+}
+
+function showBusySymbol()
+    { $( '#busySymbol' ).css( 'visibility', 'visible' ) }
+
+function hideBusySymbol()
+    { $( '#busySymbol' ).css( 'visibility', 'hidden' ) }
+
+function getDefaultModel( )
+    { return $( '#defaultModel' ).html( ) }
+
+function setDefaultModel( defaultModel )
+    { $( '#defaultModel' ).html( defaultModel ) }
+
+function getActiveModel( )
+    { return $( '#activeModel' ).html( ) }
+
+function setActiveModel( activeModelName ) {
+    $( '#activeModelLabel0' ).css( 'visibility','visible' )
+    $( '#activeModelLabel1' ).css( 'visibility','visible' )
+    $( '#activeModel' ).css( 'visibility','visible' )
+    $( '#activeModel' ).html( activeModelName )
+}
+function removeActiveModel( ) {
+    $( '#activeModelLabel0' ).css( 'visibility','hidden' )
+    $( '#activeModelLabel1' ).css( 'visibility','hidden' )
+    $( '#activeModel' ).css( 'visibility','hidden' )
+}
+
+function handleModelResult( data, status, jqXHR ) { 
+    //print( jqXHR.status ) 
+    //then( function( result ) { return result } )
+    //print( status ) 
+    if ( status == 'success' ) {
+        let defaultModel = data
+        print( 'defaultModel: ' + defaultModel )
+        //print( defaultModel )
+        //print( 'Is a string: ' + ( type( defaultModel) == type( '' ) ) ) // prints true
+        //$( '#modelID' ).
+        setDefaultModel( defaultModel )
+    }
+    else
+        { print( 'Error getting model name.' ) }
+
+    // Debug code.
+    //print( modelDatabase )
+    //print( 'engineSearch' )
+    //print( engineSearch )
+    //print( 'modelGroupSearch' )
+    //print( modelGroupSearch )
+    //print( 'modelNameSearch' )
+    //print( modelNameSearch )
+    //print( 'sourceLanguageSearch' )
+    //print( sourceLanguageSearch )
+    //print( 'targetLanguageSearch' )
+    //print( targetLanguageSearch )
+    //print( 'deviceSearch' )
+    //print( deviceSearch )
+    //before = modelDatabase[ 'transformers.opusmt.opus-mt-tc-bible-big' ][ 'models' ][ 'opus-mt-tc-bible-big-aav-fra_ita_por_spa' ][ 'sourceLanguages' ].toString()
+    //print( before )
+    //print( before.replace( ',', ' ' ) )
+    //print( before.replaceAll( ',', ' ' ) )
+}
+
+function addLinksToLanguageCodes( languageCodesString ) {
+    var isoCodeSearchURL='https://glottolog.org/glottolog?iso='
+    languageCodesList = languageCodesString.split(' ')
+    newHTML = ''
+    for ( code of languageCodesList )
+        { newHTML += '<a href=\''+ isoCodeSearchURL + code + '\' target=\'_\'>' + code + '</a>' + ' ' }
+    //print( 'newHTML', newHTML )
+    return newHTML
+}
+
+function fillModelOptionsFromEngineAndModel( context ) {
+    //print( type( context ) )
+    //print( $( this ) ) // $( this ) does not work because it looses context or something? So just pass the context in manually. Be sure to use the context directly since fixing the context does not seem possible.
+    //print( x )
+    //$(this).context = x.context // Trying to fix the context does not work.
+    //$( this )[ 0 ] = x[ 0 ]               // Does not work.
+    //print( $( this ) )
+
+    if ( ( typeof context === 'string' ) || ( context instanceof String ) )
+        { engineAndModelName = context }
+    else // It is an object, probably.
+        { engineAndModelName = context.attr( 'value' ) }
+    //print( 'engineAndModelName:'+ engineAndModelName )
+    //engineAndModelName = $( this ).attr( 'value' )
+    //engineAndModelName = $( this ).html()
+    //print( engineAndModelName )
+    //temp = engineAndModelName.split( '/' )
+    engine = engineAndModelName.split( '/' )[ 0 ]
+    //engine = temp[ 0 ]
+    modelName = engineAndModelName.split( '/' )[ 1 ]
+    //modelName = temp[ 1 ]
+    //print( engineAndModelName )
+    //print( temp ) //array
+    //print( engine )
+    //print( modelName )
+    //return
+
+    done = false
+    for ( let modulePath in modelDatabase ) {
+        if ( ( modulePath == 'active' ) || ( modulePath == 'defaultModelGroup' ) )
+            { continue }
+        currentEngine = modulePath.split( '.' )[ 0 ]
+        if ( engine != currentEngine)
+            { continue }
+        if ( done == true )
+            { break }
+        //print( 'pie2' )
+        for ( let model in modelDatabase[ modulePath ][ 'models' ] ) {
+            //print( model )
+            //print( modelName )
+            //print( model != modelName )
+            if ( model != modelName )
+                { continue }
+            //print( 'pie' )
+            $( '#engine' ).val( engine )//.change() // This works even without change() to select the right value.
+            //temp = pythonSplit( modulePath, '.', maxSplit=1 )
+            //print( temp )
+            $( '#modelGroup' ).val( pythonSplit( modulePath, '.', maxSplit=1 )[ 1 ] )
+            $( '#modelName' ).val( modelName )
+            $( '#sourceLanguage' ).val( modelDatabase[ modulePath ][ 'models' ][ model ][ 'sourceLanguage' ] )
+            $( '#targetLanguage' ).val( modelDatabase[ modulePath ][ 'models' ][ model ][ 'targetLanguage' ] )
+            // $( '#device' ).val( modelDatabase[ modulePath ][ 'models' ][ model ][ 'devices' ][ 0 ] ) //TODO: This. Update: There are no default devices for models, so this function should not be implemented.
+
+            $( '#modelNameDisplay' ).html( '<b>' + modelName + '</b>' )
+            modelSourceLanguagesTempHTML=addLinksToLanguageCodes( modelDatabase[ modulePath ][ 'models' ][ model ][ 'sourceLanguages' ].toString().replaceAll( ',', ' ' ).trim() )
+            $( '#modelSourceLanguages').html( modelSourceLanguagesTempHTML )
+            modelTargetLanguagesTempHTML=addLinksToLanguageCodes( modelDatabase[ modulePath ][ 'models' ][ model ][ 'targetLanguages' ].toString().replaceAll( ',', ' ' ).trim() )
+            $( '#modelTargetLanguages').html( modelTargetLanguagesTempHTML )
+            $( '#modelDescription').html( modelDatabase[ modulePath ][ 'models' ][ model ][ 'description' ] )
+            tempHTML = ''
+            if ( ( modelDatabase[ modulePath ][ 'models' ][ model ][ 'modelURLs' ] != null ) && ( modelDatabase[ modulePath ][ 'models' ][ model ][ 'modelURLs' ] != undefined ) ) {
+                for ( url of modelDatabase[ modulePath ][ 'models' ][ model ][ 'modelURLs' ] )
+                    { tempHTML += '<a href=\'' + url + '\' target=\'_\'>'+ url +'</a><br/>' }
+                //tempHTML = tempHTML.slice( 0, tempHTML.length -1 ) // Cut off final ,.
+            }
+            $( '#modelURLs' ).html( tempHTML )
+            done = true
+            break
+        } // close for modelDatabase[ models ]
+    } // close for modulePath
+    $( '#modelNameDisplayLabel' ).addClass( 'hide' )
+    $( '#modelNameDisplay' ).removeClass( 'hide' )
+
+    //fixTheme()
+}
+
+function listSearchResults( modelList ) {
+    //$( '#searchResults' ).html( '' )
+    newHTML = ''
+    for ( model of modelList )
+        { newHTML += '\n<div><button value=\'' + model + '\'>'+model+'</button></div>' }
+    //print( newHTML )
+    $( '#searchResults' ).html( newHTML )
+    $( '#searchResults' ).on(
+        'click', 'button', function() { fillModelOptionsFromEngineAndModel( $(this) ) } )
+    //{ print( $( this ) ) } )
+    //fillModelOptionsFromEngineAndModel( )
+
+    //fixTheme()
+}
+
+function resolveAndListEngineSearch() {
+    selectedEngine = $( '#engineSearch' ).val()
+    //print( value )
+    doNothing = false
+    if ( ( selectedEngine == undefined ) || ( selectedEngine == null ) || ( selectedEngine == 'None' ) || ( selectedEngine == 'none' ) || ( selectedEngine.toLowerCase() == 'none' ) )
+        { doNothing = true }
+    if ( doNothing == true )
+        { return }
+    // else do something
+    // selectedEngine is an engine. Need to list modelPath/model.
+    modelList = [ ]
+    for ( let modulePath in modelDatabase ) {
+        if ( ( modulePath == 'active' ) || ( modulePath == 'defaultModelGroup' ) )
+            { continue }
+        currentEngine = modulePath.split( '.' )[ 0 ]
+        if ( selectedEngine != currentEngine)
+            { continue }
+        for ( let model in modelDatabase[ modulePath ][ 'models' ] ) {
+            modelList.push( currentEngine + '/' + model )
+        } //closes for model in modelDatabase[ models ]
+    } //closes for modulePath
+    listSearchResults( modelList )
+}
+
+function resolveAndListModuleSearch() {
+    selectedModule = $( '#modelGroupSearch' ).val()
+    //engine = pythonSplit( selectedModule, '.' )[ 0 ]
+    engine = selectedModule.split( '.' )[ 0 ]
+    modelList = [ ]
+    for ( let modulePath in modelDatabase ) {
+        if ( ( modulePath == 'active' ) || ( modulePath == 'defaultModelGroup' ) )
+            { continue }
+        if ( modulePath != selectedModule )
+            { continue }
+        for ( model in modelDatabase[ modulePath ][ 'models' ] ) {
+            modelList.push( engine + '/' + model )
+        } //closes for modelDatabase[ models ]
+    } // closes for modelDatabase
+    listSearchResults( modelList )
+}
+
+function resolveAndListModelNameSearch() {
+    selectedEngineAndModel = $( '#modelNameSearch' ).val()
+    fillModelOptionsFromEngineAndModel( selectedEngineAndModel )
+}
+
+function resolveAndListModelName() {
+    selectedModel = $('#modelName' ).val()
+    done = false
+    var correctEngine = null
+    for ( let modulePath in modelDatabase ) {
+        if ( ( modulePath == 'active' ) || ( modulePath == 'defaultModelGroup' ) )
+            { continue }
+        currentEngine = modulePath.split( '.' )[ 0 ]
+        if ( done == true )
+            { break }
+        for ( model in modelDatabase[ modulePath ][ 'models' ] ) {
+            //print( model )
+            //print( selectedModel )
+            if ( model != selectedModel )
+                { continue }
+            correctEngine = currentEngine
+            done = true
+            break
+        } //closes for modelDatabase[ models ]
+    } //closes for modelDatabase
+    assert( correctEngine != null )
+    assert( correctEngine != undefined )
+    fillModelOptionsFromEngineAndModel( correctEngine + '/' + selectedModel )
+}
+
+function resolveAndListSourceLanguageSearch() {
+    sourceLanguage = $( '#sourceLanguageSearch' ).val()
+    //sourceLanguageSearch //{ } This maps a source language, like 'ja', to a list [ ] where each entry in the list is a different modulePath/modelName.
+    modelList = [ ]
+    for ( entry of sourceLanguageSearch[ sourceLanguage ] ){
+        modulePath = entry.split( '/' )[ 0 ]
+        model = entry.split( '/' )[ 1 ]
+        engine = modulePath.split( '.' )[ 0 ]
+        modelList.push( engine + '/' + model )
+    }
+    listSearchResults( modelList )
+}
+
+function resolveAndListTargetLanguageSearch() {
+   targetLanguage = $( '#targetLanguageSearch' ).val()
+    //targetLanguageSearch //{ } This maps a source language, like 'ja', to a list [ ] where each entry in the list is a different modulePath/modelName.
+    modelList = [ ]
+    for ( entry of targetLanguageSearch[ targetLanguage ] ){
+        modulePath = entry.split( '/' )[ 0 ]
+        model = entry.split( '/' )[ 1 ]
+        engine = modulePath.split( '.' )[ 0 ]
+        modelList.push( engine + '/' + model )
+    }
+    listSearchResults( modelList )
+}
+
+function resolveAndListDeviceSearch() {
+    device = $( '#deviceSearch' ).val()
+    //deviceSearch // This is a dictionary that maps a device to a list of [ modulePath/modelName ] entries.
+    modelList = [ ]
+    for ( entry of deviceSearch[ device ] ) {
+        modulePath = entry.split( '/' )[ 0 ]
+        model = entry.split( '/' )[ 1 ]
+        engine = modulePath.split( '.' )[ 0 ]
+        modelList.push( engine + '/' + model )
+    }
+    listSearchResults( modelList )
+}
+
+function setSelectOptions( idTag, newValues ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    //print( type ( newHTML ) ) //string
+    if ( newValues instanceof Array)  {
+        for ( value of newValues )
+            { newHTML += '\n<option value=\'' + value + '\'>' + value + '</option>' }
+    }
+    else {
+        for ( value in newValues )
+            { newHTML += '\n<option value=\'' + value + '\'>' + value + '</option>' }
+    }
+    //print( newHTML )
+    $( idTag ).html( newHTML )
+}
+
+function setEngine( enginesTemp )
+    { setSelectOptions( '#engine', enginesTemp) }
+
+function setModelGroup( modelGroupsTemp )
+    { setSelectOptions( '#modelGroup', modelGroupsTemp ) }
+
+function setModelName( modelNamesTemp )
+    { setSelectOptions( '#modelName', modelNamesTemp ) }
+
+function setSourceLanguage( sourceLanguagesTemp )
+    { setSelectOptions( '#sourceLanguage', sourceLanguagesTemp) }
+
+function setTargetLanguage( targetLanguagesTemp)
+    { setSelectOptions( '#targetLanguage', targetLanguagesTemp ) }
+
+function setDevice( deviceSearchTemp )
+    { setSelectOptions( '#device', deviceSearchTemp ) }
+
+function setEngineSearch( engineSearchTemp ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    //print( type ( newHTML ) ) //string
+    for ( engine of engineSearchTemp )
+        { newHTML += '\n<option value=\'' + engine + '\'>' + engine + '</option>' }
+    $( '#engineSearch' ).html( newHTML )
+}
+
+function setModelGroupSearch( modelGroupSearchTemp ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    for ( modulePath of modelGroupSearchTemp )
+        { newHTML += '\n<option value=\'' + modulePath + '\'>' + modulePath + '</option>' }
+    $( '#modelGroupSearch' ).html( newHTML )
+}
+
+function setModelNameSearch( modelNameSearchTemp ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    for ( modelName in modelNameSearchTemp )
+        { newHTML += '\n<option value=\'' + modelName + '\'>' + modelName + '</option>' }
+    $( '#modelNameSearch' ).html( newHTML )
+}
+
+function setSourceLanguageSearch( sourceLanguageSearchTemp ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    for ( sourceLanguage in sourceLanguageSearchTemp )
+        { newHTML += '\n<option value=\'' + sourceLanguage + '\'>' + sourceLanguage + '</option>' }
+    $( '#sourceLanguageSearch' ).html( newHTML )
+}
+
+function setTargetLanguageSearch( targetLanguageSearchTemp ) {
+    newHTML = '<option value=\'None\'>None</option>'
+    for ( targetLanguage in targetLanguageSearchTemp )
+        { newHTML += '\n<option value=\'' + targetLanguage + '\'>' + targetLanguage + '</option>' }
+    $( '#targetLanguageSearch' ).html( newHTML )
+}
+
+function setDeviceSearch( deviceSearchTemp )
+    { setSelectOptions( '#deviceSearch', deviceSearchTemp ) }
+
+function changeLanguage( languageCode='None' ) {
+    //print( 'languageCode' )
+    //print( languageCode ) //Prints deu or similar.
+    if ( languageCode == 'None' )
+        { languageCode = $( '#uiLanguage' ).val() }
+    if ( languageCode == 'None' )
+        { return }
+    if ( supportedLanguagesForUI.hasOwnProperty( languageCode ) == false )
+        { return }
+
+    // Debug code.
+    //print( uiLabels )
+    //print( window.uiLabels) // Both window.uiLabels and uiLabels work.
+    //window.supportedLanguagesForUIList //not available
+
+    // Update <html lang=''> attribute using the iana code.
+    $( 'html' ).attr( 'lang', supportedLanguagesForUI[ languageCode ][ 'iana' ] )
+
+
+    //languageStringsForUI
+    //uiLabel
+    //for every label, update it using languageStringsForUI[ languageCode][ label ], then update the tweaky one afterwards.
+    for ( label of uiLabels ) {
+        //print( label )
+        $( '#'+label ).html( languageStringsForUI[ languageCode ][ label ] )
+    }
+    $( '.byLabel' ).html( languageStringsForUI[ languageCode ][ 'byLabel' ] )
+    $( '.noneOptionLabel' ).html( languageStringsForUI[ languageCode ][ 'noneOptionLabel' ] )
+    $( '#sourceTextArea' ).attr( 'placeholder', languageStringsForUI[ languageCode ][ 'sourceText' ] ) 
+
+    // Store the languageCode in localStorage so the ui remembers the last used ui language.
+    if ( languageCode == 'eng' )
+        { localStorage.removeItem( 'uiLanguage' ) }
+    else
+        { localStorage.setItem( 'uiLanguage', languageCode ) }
+}
+
+//function handleLocaleResponse( data, status, jqXHR, adwada ) {
+function handleLocaleResponse( supportedLanguagesRequest, languageStringsRequest ) {
+    //print( 'data' )
+    //print( data ) // This is an array with 3 variables, data, status, and jqXHR.
+    //print( 'status' )
+    //print( status ) // This is an array with 3 variables, data, status, and jqXHR.
+    //print( 'jqXHR' )
+    //print( jqXHR ) //undefined
+    //print( 'adwada' )
+    //print( adwada ) //undefined
+    //print( this )
+
+    if ( supportedLanguagesRequest[ 1 ] != 'success' ) {
+        print( 'Error getting locale/supportedLanguages.csv.' )
+        return
+    }
+    if ( languageStringsRequest[ 1 ] != 'success' ) {
+        print( 'Error getting locale/supportedLanguagesStrings.csv.' )
+        return
+    }
+
+    //print( 'locale data' )
+    //print( data ) //csv file
+    //responseList = window.__modules__.csvParser( data )
+    responseList = window.__modules__.csvParser( supportedLanguagesRequest[ 0 ] )
+    //print( responseList ) // Javascript list.
+    var supportedLanguagesForUI = { }
+    // [ "amh", "am", "amha1245", "Amharic", "አማርኛ" ]
+    for ( [ counter, listOfStrings ] of responseList.entries() ) {
+        if ( counter === 0 )
+            { continue }
+        temp = { }
+        temp[ 'iso639-3' ] = listOfStrings[ 0 ]
+        temp[ 'iana' ] = listOfStrings[ 1 ]
+        temp[ 'glottocode' ] = listOfStrings[ 2 ]
+        temp[ 'English' ] = listOfStrings[ 3 ]
+        temp[ 'native' ] = listOfStrings[ 4 ]
+        supportedLanguagesForUI[ listOfStrings[ 0 ] ] = temp
+    }
+    print( 'supportedLanguagesForUI' )
+    print( supportedLanguagesForUI ) // Dictionary.
+
+    // Technically, the information here can be partially derived by looking up a known value for a specific key and mapping the number of rows per language, but then these labels would need to be overloaded somehow, such as placed in the first column.
+    var uiLabels = [ 'searchLanguageCodesLabel', 'noneOptionLabel', 'themesLabel', 'languagesLabel', 'uiModeLabel', 'uiModeSimpleLabel', 'uiModeAdvancedLabel', 'searchModelsLabel', 'byLabel', 'selectAModelLabel', 'selectModelOptionsLabel', 'modelURLsLabel', 'customLabel', 'modelDescriptionLabel', 'modelNameDisplayLabel', 'enterSourceText', 'sourceText', 'translateButton', 'removeLinesCheckboxLabel', 'copyToClipboardButton', 'afterCopyToClipboardButtonLabel', 'severIDLabel', 'defaultModelLabel', 'activeModelLabel0', 'highContrastWhiteLabel', 'highContrastBlackLabel', 'darkLabel', 'mikuLabel' ]
+
+    responseList = window.__modules__.csvParser( languageStringsRequest[ 0 ] )
+    //print( responseList ) // Javascript list.
+    //print( window.module ) //undefined
+
+    languageStringsForUI = { }
+    supportedLanguagesForUIList = [ ]
+    for ( tempLanguage in supportedLanguagesForUI )
+        { supportedLanguagesForUIList.push( tempLanguage ) }
+    //print( supportedLanguagesForUIList ) // Javascript list.
+
+    tempSupportedLanguagesForUIList = [ ]
+    for ( [ counter, listOfStrings ] of responseList.entries() ) {
+        if ( counter === 0 ) {
+            for ( tempLanguage of listOfStrings ) {
+                languageStringsForUI[ tempLanguage ] = { }
+                tempSupportedLanguagesForUIList.push( tempLanguage ) 
+            }
+            continue
+        }
+        for ( [ counter2, tempString ] of listOfStrings.entries() ) {
+            tempLanguageCode = tempSupportedLanguagesForUIList[counter2 ]
+            languageStringsForUI[ tempLanguageCode ][ uiLabels[ counter - 1 ] ] = tempString
+        }
+    } // Close for responseList.
+    //print( tempSupportedLanguagesForUIList )
+
+    // Sanity check. The language codes from supportedLanguages.csv must match the language codes from supportedLanguagesStrings.csv.
+    list1AsString= supportedLanguagesForUIList.join()
+    list2AsString=tempSupportedLanguagesForUIList.join()
+    //print( '\'' + list1AsString + '\'' )
+    //print( '\'' + list2AsString + '\'' )
+    //print( supportedLanguagesForUIList.join() == tempSupportedLanguagesForUIList.join() )
+    assert( list1AsString === list2AsString )
+
+    //print( languageStringsForUI )
+
+    // Add all of the languages to the language select box as 'iso [iso639-3 code] [native] [english]'
+    baseOption = '<option value=\'None\' id=\'languagesLabel\'>Language</option>'
+    //print( baseOption )
+    newHTML = baseOption
+    for ( let language in supportedLanguagesForUI )
+        { newHTML+='\n<option value=\''+ language +'\'>'+ supportedLanguagesForUI[ language ][ 'iso639-3' ] + ' ' + supportedLanguagesForUI[ language ][ 'native' ] + ' ' + supportedLanguagesForUI[ language ][ 'English' ] + '</option>' }
+    //print( 'newHTML' )
+    //print( newHTML )
+    $( '#uiLanguage' ).html( newHTML )
+
+    // Export the uiLabels since these are the literal keynames for each value. They mostly but also do not perfectly match the css/jquery selectors written into the html.
+    window.uiLabels = uiLabels
+    //window.supportedLanguagesForUIList
+    // Export the actual data. An alternative to window. is to hide it inside of an html tag as a data=[] attribute or localStorage, or session storage.
+    window.supportedLanguagesForUI = supportedLanguagesForUI
+    window.languageStringsForUI = languageStringsForUI
+
+    // Now that everything is done processing and exporting, if there is a languageCode stored in localStorage from a previous instance, then use that on startup for convenience.
+    languageCode = localStorage.getItem( 'uiLanguage' )
+    //print( 'languageCode' )
+    //print( languageCode ) // null
+    if ( languageCode !== null ) {
+        if ( supportedLanguagesForUIList.includes( languageCode ) == true )
+            { changeLanguage( languageCode ) }
+    }
+} // Close handleLocaleResponse().
+
+// If the mode is simple, then display: none some of the divs. If mode is advanced, then display them.
+function changeUIMode( chosenUIMode='None' ) {
+    if ( chosenUIMode == 'None' )
+        { chosenUIMode = $( '#uiMode' ).val() }
+    //print( 'chosenUIMode' )
+    //print( chosenUIMode )
+    if ( chosenUIMode == 'None' )
+        { return }
+    if ( chosenUIMode == 'simple' ) {
+        for ( tempClass of window.__staticVariables__.simpleAdvancedToggles ) {
+            //print( tempClass )
+            $( tempClass ).css( 'display', 'none' )
+        }
+    }
+    else if ( chosenUIMode == 'advanced' ) {
+        for ( tempClass of window.__staticVariables__.simpleAdvancedToggles )
+            { $( tempClass ).css( 'display', '' ) }
+    }
+
+    // Save selected mode in localStorage for convenience.
+    uiMode = localStorage.getItem( 'uiMode' )
+    if ( uiMode != chosenUIMode )
+        { localStorage.setItem( 'uiMode', chosenUIMode ) }
+
+} // Close changeUIMode().
+
+/*
+html { 
+    color: turquoise;
+    background-color: rgb(15 15 15 );
+    background-image: url( '/img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png' ); 
+    background-repeat: no-repeat; }
+a { color: turquoise; }
+input {
+    color: magenta;
+    background-color: green; }
+textarea {
+    color: magenta;
+    background-color: pink; }
+select {
+    color: magenta;
+    background-color: orange; }
+button {
+    color: pink;
+    background-color: yellow; } */
+
+/*
+function changeTheme( backgroundColor=null, primaryColor=null, textColor= null, mikuMode=false ){
+    tags = [ 'html', 'a', 'input', 'textarea', 'select', 'button' ]
+    for ( tag of tags ) {
+        $( tag ).css( 'background-color', backgroundColor ) 
+        $( tag ).css( 'color', textColor ) 
+    }
+    // background-image: url( 'img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png' ); 
+    // background-repeat: no-repeat;
+    if ( mikuMode == true) {
+        $( 'html' ).css( 'background-image', 'url( \'img/hatsune_miku_vocaloid_drawn_by_kei_keigarou2.png\' )' )
+        $( 'html' ).css( 'background-repeat', 'no-repeat' )
+    }
+    else {
+        $( 'html' ).css( 'background-image', '' )
+        $( 'html' ).css( 'background-repeat', '' )
+    }
+}
+*/
+
+function handleChangeTheme() {
+    theme = $( '#themes' ).val()
+    //print( 'theme2' )
+    //print( theme )
+    if ( theme != 'None' )
+        { fixTheme( theme ) }
+}
+
+/*
+function handleChangeTheme( theme='None' ) {
+    if ( theme == 'None' )
+        { theme = $( '#themes' ).val() }
+    print( 'theme' )
+    print( theme )
+    if ( theme == 'None' )
+        { return }
+    // print( 'a' + null ) // Will print out 'anull'.
+    backgroundColor = null
+    primaryColor = null
+    textColor = null
+    mikuMode = false
+
+    if ( theme == 'None2' ) {
+    backgroundColor = ''
+    primaryColor = ''
+    textColor = ''
+    }
+    else if ( theme == 'highContrastWhite' ) {
+        backgroundColor = 'white'
+        primaryColor = 'white'
+        textColor = 'black'
+    }
+    else if ( theme == 'highContrastBlack' ) {
+        backgroundColor = 'black'
+        primaryColor = 'black'
+        textColor = 'white'
+    }
+    else if ( theme == 'dark' ) {
+        backgroundColor = 'rgb( 10 10 10 )'
+        primaryColor = 'rgb( 10 10 10 )'
+        textColor = 'rgb( 200, 200, 200 )'
+    }
+    else if ( theme == 'miku' ) {
+        backgroundColor = 'rgb( 15 15 15 )'
+        primaryColor = 'rgb( 15 15 15 )'
+        textColor = 'turquoise'
+        mikuMode = true
+    }
+    changeTheme( backgroundColor=backgroundColor, primaryColor=primaryColor, textColor=textColor, mikuMode=mikuMode )
+
+    //save
+    //localStorage
+}
+*/
+
+function handleModelsResult( data, status, jqXHR ) { 
+    //print( jqXHR.status ) 
+    //then( function( result ) { return result } )
+    //print( status ) 
+    if ( status != 'success' ) {
+        print( 'Error getting modelDatabase.json.' ) ; 
+        return
+    }
+    modelDatabase = data
+    print( 'modelDatabase:' )
+    print( modelDatabase )
+    //hasOwnProperty fruits.includes('Lemon')
+    //print( modelDatabase.hasOwnProperty( 'fairseq.sugoi' ) ) //prints true if the fairseq.sugoi modulePath is in modelDatabase
+
+    engineSearch = [ ] // maps engines, like fairseq, ctranslate2, to every modelName using it.
+    modelGroupSearch = [ ]
+    modelNameSearch = { }
+    sourceLanguageSearch = { } // This maps a source language, like 'ja', to a list [ ] where each entry in the list is a different modelName.
+    targetLanguageSearch = { } // This maps target languages to a list [ ] where each entry in the list is a different modelName.
+    deviceSearch = { } // Stub.
+
+    for ( let modulePath in modelDatabase ) {
+        if ( modulePath == 'active' ) {
+            if ( modelDatabase[ modulePath ] == null ) { 
+                removeActiveModel()
+                continue
+            }
+            //activeModelName = 'x'
+            activeModelName = modelDatabase[ 'active' ][ 'engine' ] + '/' + modelDatabase[ 'active' ][ 'modelName' ] + '/' + modelDatabase[ 'active' ][ 'hash' ] + ' on ' + modelDatabase[ 'active' ][ 'device' ]
+            setActiveModel( activeModelName )
+            continue
+        }
+        else if ( modulePath == 'defaultModelGroup' )
+            { continue }
+
+        print( 'Processing module ' + modulePath )
+
+        tempEngine = modulePath.split( '.' )[ 0 ]
+        if ( engineSearch.includes( tempEngine ) == false )
+            { engineSearch.push( tempEngine ) }
+
+        if ( modelGroupSearch.includes( modulePath ) == false ) // This should always be false, right?
+            { modelGroupSearch.push( modulePath ) }
+
+        for ( let model in modelDatabase[ modulePath ][ 'models' ] ) {
+            print( 'Processing model ' + model )
+            tempEngineAndModel = tempEngine + '/' + model
+            tempModulePathAndModelName = modulePath + '/' + model
+            var tempSourceLanguages = modelDatabase[ modulePath ][ 'models' ][ model ][ 'sourceLanguages' ]
+            var tempTargetLanguages = modelDatabase[ modulePath ][ 'models' ][ model ][ 'targetLanguages' ]
+            //print( tempSourceLanguages )
+            //print( tempTargetLanguages )
+
+            if ( modelNameSearch.hasOwnProperty( tempEngineAndModel ) == false )
+                { modelNameSearch[ tempEngineAndModel ] = modulePath }
+
+            for ( let language of tempSourceLanguages ) {
+                if ( sourceLanguageSearch.hasOwnProperty( language ) == false )
+                    { sourceLanguageSearch[ language ] = [ tempModulePathAndModelName ]  }
+                else {
+                    //if ( sourceLanguageSearch[ language ].includes( tempModulePathAndModelName ) == false )
+                    assert( sourceLanguageSearch[ language ].includes( tempModulePathAndModelName ) == false, 'sourceLanguageSearch[ '+language+' ] already includes ' + tempModulePathAndModelName )
+                    sourceLanguageSearch[ language ].push(  tempModulePathAndModelName )
+                    // else if the sourceLanguageSearch dictionary includes this module/model already, then do nothing. Is it possible for there to be a conflict? No right? So just add it unconditionally. Replace with assertion instead.
+                } //close else
+            } //close for of tempSourceLanguages
+
+            for ( let language of tempTargetLanguages ) {
+                if ( targetLanguageSearch.hasOwnProperty( language ) == false )
+                    { targetLanguageSearch[ language ] = [ tempModulePathAndModelName ] }
+                else {
+                    assert( targetLanguageSearch[ language ].includes( tempModulePathAndModelName ) == false, 'targetLanguageSearch[ '+language+' ] already includes ' + tempModulePathAndModelName )
+                    targetLanguageSearch[ language ].push( tempModulePathAndModelName )
+                } // close else
+            } // close for language of tempTargetLanguages
+
+            //print( modelDatabase[ modulePath ][ 'settings' ][ 'devices' ] )
+            //print( deviceSearch )
+            for ( let tempDevice of modelDatabase[ modulePath ][ 'settings' ][ 'devices' ] ) {
+                if ( deviceSearch.hasOwnProperty( tempDevice ) == false )
+                    { deviceSearch[ tempDevice ] = [ tempModulePathAndModelName ] }
+                else
+                    { deviceSearch[ tempDevice ].push( tempModulePathAndModelName ) }
+            } //close for tempDevice in devices
+            //print( deviceSearch )
+        } // close for models
+    } // close modulePath in modelDatabase
+
+    // The joys of sorting.
+    // https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
+    engineSearch.sort()
+
+    modelGroupSearch.sort()
+
+    modelNameSearch = Object.keys( modelNameSearch ).sort().reduce( (object, key) => { object[ key ] = modelNameSearch[ key ]; return object; }, { } );
+
+    sourceLanguageSearch = Object.keys( sourceLanguageSearch ).sort().reduce( (object, key) => { object[ key ] = sourceLanguageSearch[ key ]; return object; }, { } );
+
+    targetLanguageSearch = Object.keys( targetLanguageSearch ).sort().reduce( (object, key) => { object[ key ] = targetLanguageSearch[ key ]; return object; }, { } );
+
+    //print( deviceSearch )
+    deviceSearch = Object.keys( deviceSearch ).sort().reduce( (object, key) => { object[ key ] = deviceSearch[ key ]; return object; }, { } );
+
+    //sourceLanguageSearch and targetLanguageSearch should also have de-duplicated variants. Right now both 'en' and 'eng' are listed seperately. They should be combined into one based on 3 letter language codes for searches in 1.Search Models. Models that have custom language codes should use a csv/customMappingsForLanguageCodes.csv to map spa_Latn patterns to spa. That loss of information does not matter when searching since it can be created dynamically again from modelDatabase when a model gets selected.
+
+    // device.sort()
+    // Populate the 1. Search Models entries.
+    setEngineSearch( engineSearch )
+    setEngine( engineSearch )
+
+    setModelGroupSearch( modelGroupSearch )
+    // The exact values were fudged for the setSearch() functions to make it easier to 1. Search Models and to keep entries unique. However, when setting the 3. Select Model Options, the values should be literally correct irrespective of context. Merging duplicates and incorrect settings are no longer an issue as well.
+    literalModelGroups = [ ]
+    for ( modulePath of modelGroupSearch ) {
+        // In string.split.(delimiter , number) the number is the maximum number of elements that should be in the final array. If the number of values generated by the delimiter exceeds this amount, then the rest will be truncated.
+        tempArray = modulePath.split( '.' )
+        tempString = ''
+        //for ( item of tempArray)
+        for ( [ counter, item ] of tempArray.entries() ) {
+            if ( counter == 0 )
+                { continue }
+            tempString += item + '.'
+        }
+        tempString = tempString.slice( 0, tempString.length -1 ) // Cut off the final .
+        if ( literalModelGroups.includes( tempString ) == false )
+            { literalModelGroups.push( tempString ) }
+    }
+    literalModelGroups.sort()
+    setModelGroup( literalModelGroups )
+
+    setModelNameSearch( modelNameSearch )
+    literalModelNames = [ ]
+    for ( model in modelNameSearch ) {
+        tempModelName = model.split( '/' )[ 1 ]
+        if ( literalModelNames.includes( tempModelName ) == false )
+            { literalModelNames.push( tempModelName ) }
+    }
+    literalModelNames.sort()
+    setModelName( literalModelNames )
+
+    setSourceLanguageSearch( sourceLanguageSearch )
+    setSourceLanguage( sourceLanguageSearch )
+
+    setTargetLanguageSearch( targetLanguageSearch )
+    setTargetLanguage( targetLanguageSearch )
+
+    setDeviceSearch( deviceSearch )
+    setDevice( deviceSearch )
+    return
+
+    // Debug code.
+    print( 'engineSearch' )
+    print( engineSearch )
+
+    print( 'modelGroupSearch' )
+    print( modelGroupSearch )
+
+    print( 'modelNameSearch' )
+    print( modelNameSearch )
+
+    print( 'sourceLanguageSearch' )
+    print( sourceLanguageSearch )
+
+    print( 'targetLanguageSearch' )
+    print( targetLanguageSearch )
+
+    print( 'deviceSearch' )
+    print( deviceSearch )
+
+} // Close handleModelsResult.
+
+// https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript
+function fallbackCopyTextToClipboard( text ) {
+    var tempTextArea = document.createElement( 'textarea' )
+    tempTextArea.value = text
+    document.body.appendChild( tempTextArea )
+    tempTextArea.focus()
+    tempTextArea.select()
+    document.execCommand( 'copy' )
+    document.body.removeChild( tempTextArea )
+}
+
+function copyTranslationToClipboard() {
+    translation = $( '#translationTextArea' ).val()
+    if ( !navigator.clipboard )
+        { fallbackCopyTextToClipboard( translation + '\n' ) }
+    else
+        { navigator.clipboard.writeText( translation + '\n' ) }
+
+    //$( '#afterCopyToClipboardButton' ).html( 'Copied!' ) // How can this be displayed temporarily?
+    // Maybe a sleep function, or a register event 2s from now function? or maybe a css animation?
+    //$( '#afterCopyToClipboardButtonLabel' ).toggleClass( 'displayBriefly' )
+    $( '#afterCopyToClipboardButtonLabel' ).toggleClass( 'hide' )
+    setTimeout( function() { $( '#afterCopyToClipboardButtonLabel' ).toggleClass( 'hide' ) }, 2000 )
+}
+
+function getOptionsValue( selectableOption, optionCustom ) {
+    if ( stringHasValue( optionCustom ) == true ) { return optionCustom.trim() }
+    else if ( stringHasValue( selectableOption ) == true ) { return selectableOption.trim() }
+    else { return '' }
+}
+
+/*
+function getOptions() {
+    engine = $( '#engine' ).val()
+    engineCustom = $( '#engineCustom' ).val()
+    print( 'engine:' + engine )
+    print( 'engineCustom:' + engineCustom )
+    engine = getOptionsValue( engine, engineCustom )
+    print( 'final engine value: \'' + engine +'\'' )
+
+    modelGroup = $( '#modelGroup' ).val()
+    modelGroupCustom = $( '#modelGroupCustom' ).val()
+    modelGroup = getOptionsValue( modelGroup, modelGroupCustom )
+    print( 'final modelGroup value: \'' + modelGroup +'\'' )
+
+    modelName = $( '#modelName' ).val()
+    modelNameCustom = $( '#modelNameCustom' ).val()
+    modelName = getOptionsValue( modelName, modelNameCustom )
+    print( 'final modelName value: \'' + modelName +'\'' )
+
+    sourceLanguage = $( '#sourceLanguage' ).val()
+    sourceLanguageCustom = $( '#sourceLanguageCustom' ).val()
+    sourceLanguage = getOptionsValue( sourceLanguage, sourceLanguageCustom )
+    print( 'final sourceLanguage value: \'' + sourceLanguage +'\'' )
+    
+    targetLanguage = $( '#targetLanguage' ).val()
+    targetLanguageCustom = $( '#targetLanguageCustom' ).val()
+    targetLanguage = getOptionsValue( targetLanguage, targetLanguageCustom )
+    print( 'final targetLanguage value: \'' + targetLanguage +'\'' )
+
+    device = $( '#device' ).val()
+    deviceCustom = $( '#deviceCustom' ).val()
+    device = getOptionsValue( device, deviceCustom )
+    print( 'final device value: \'' + device +'\'' )
+
+    return { 'engine' : engine,
+    'modelGroup' : modelGroup,
+    'modelName' : modelName,
+    'sourceLanguage': sourceLanguage,
+    'targetLanguage': targetLanguage,
+    'device' : device, }
+}
+*/
+
+function getOptions() {
+    //print( 'pie' )
+    engine = $( '#engine' ).val()
+    engineCustom = $( '#engineCustom' ).val()
+    //print( 'engine:' + engine )
+    //print( 'engineCustom:' + engineCustom )
+    //print( 'pie3' )
+    engine = getOptionsValue( engine, engineCustom )
+    //print( 'final engine value: \'' + engine +'\'' )
+
+    modelGroup = $( '#modelGroup' ).val()
+    modelGroupCustom = $( '#modelGroupCustom' ).val()
+    modelGroup = getOptionsValue( modelGroup, modelGroupCustom )
+    //print( 'final modelGroup value: \'' + modelGroup +'\'' )
+
+    modelName = $( '#modelName' ).val()
+    modelNameCustom = $( '#modelNameCustom' ).val()
+    modelName = getOptionsValue( modelName, modelNameCustom )
+    //print( 'final modelName value: \'' + modelName +'\'' )
+
+    sourceLanguage = $( '#sourceLanguage' ).val()
+    sourceLanguageCustom = $( '#sourceLanguageCustom' ).val()
+    sourceLanguage = getOptionsValue( sourceLanguage, sourceLanguageCustom )
+    //print( 'final sourceLanguage value: \'' + sourceLanguage +'\'' )
+    
+    targetLanguage = $( '#targetLanguage' ).val()
+    targetLanguageCustom = $( '#targetLanguageCustom' ).val()
+    targetLanguage = getOptionsValue( targetLanguage, targetLanguageCustom )
+    //print( 'final targetLanguage value: \'' + targetLanguage +'\'' )
+
+    device = $( '#device' ).val()
+    deviceCustom = $( '#deviceCustom' ).val()
+    device = getOptionsValue( device, deviceCustom )
+    //print( 'final device value: \'' + device +'\'' )
+
+    returnDictionary = { }
+    if ( engine != '' )
+        { returnDictionary[ 'engine' ] = engine }
+    if ( modelGroup != '' )
+        { returnDictionary[ 'modelGroup' ] = modelGroup }
+    if ( modelName != '' )
+        { returnDictionary[ 'modelName' ] = modelName }
+    if ( sourceLanguage != '' )
+        { returnDictionary[ 'sourceLanguage' ] = sourceLanguage }
+    if ( targetLanguage != '' )
+        { returnDictionary[ 'targetLanguage' ] = targetLanguage }
+    if ( device != '' )
+        { returnDictionary[ 'device' ] = device }
+    return returnDictionary
+}
+
+
+// This funtion takes the rawText input, creates a list based upon the new lines, creates translateMe using the non-empty lines, and then returns both lists.
+function normalizeRawText( tempRawText ) {
+    assert( ( ( typeof tempRawText === 'string' ) || ( tempRawText instanceof String ) ) == true )
+
+    let translateMe = [ ]
+    index = tempRawText.indexOf( '\n' )
+    //print( 'index:' + index)
+
+    let tempRequestList = rawText.split( '\n' )
+    //print( 'unprocessed tempRequestList:' + tempRequestList )
+    //print( tempRequestList )
+    for ( [ counter, x ] of tempRequestList.entries() ) {
+        temp = x.trim()
+        tempRequestList[ counter ] = temp
+        if ( temp != '' )
+            { translateMe.push( temp ) }
+    }
+    return [ translateMe, tempRequestList ]
+}
+
+function unpackTranslatedResults( returnedList, tempRequestList, removeEmptyLines=true ) {
+    print( 'The returned request data:')
+    print( returnedList )
+
+    // Normalize output.
+    //removeEmptyLines = false
+    if ( removeEmptyLines == true )
+        { translatedList = returnedList }
+    else {
+        translatedList = [ ]
+        resultsPointer = 0
+        for ( i of tempRequestList ) {
+            if ( i == '' )
+                { translatedList.push( i ) }
+            else {
+                translatedList.push( returnedList[ resultsPointer ] )
+                resultsPointer += 1
+            }
+        } //close for tempRequestList
+    } //close else
+    //print( 'translatedList' )
+    //print( translatedList )
+    // Need to convert the list back into a string.
+    translatedString = ''
+    for ( i of translatedList )
+        { translatedString += i + '\n' }
+    translatedString = translatedString.slice( 0, translatedString.length -1 ) // Cut off the final '\n'.
+
+    // Remove pretty graphics.
+    showResultTextArea()
+    hideBusySymbol()
+
+    // And finally, show translated results.
+    //print( translatedString )
+    //assert( 1 > 2 )
+    //assert( 1 > 2, 'error')
+    $( '#translationTextArea' ).val( translatedString )
+}
+
+
+function handleTranslationRequest() {
+    // Get translation data.
+    rawText = $( '#sourceTextArea' ).val()
+    //print( 'rawText: \'' + rawText + '\'' )
+    if ( ( rawText == undefined ) || ( rawText == null ) )
+        { return }
+    rawText = rawText.trim()
+    if ( rawText == '' )
+        { return }
+
+    // Get optional user inputs.
+    //listOfDictionariesFromForm = $( '#sourceTextForm' ).serializeArray()
+    //print( listOfDictionariesFromForm )
+    removeEmptyLines = $( '#removeLinesCheckbox' ).is( ':checked' )//.val()
+    //print( 'removeEmptyLines ' + removeEmptyLines )    
+    removeEmptyLines = bool( removeEmptyLines )
+    //print( 'removeEmptyLines ' + removeEmptyLines )
+
+    // Preprocess data.
+    returnValue = normalizeRawText( rawText )
+    translateMe = returnValue[ 0 ]
+    tempRequestList = returnValue[ 1 ]
+    //print( 'translateMe:' )
+    //print( translateMe )
+    //print( 'tempRequestList:' )
+    //print( tempRequestList )
+
+    //Create request dictionary from user input.
+    requestPayload = getOptions()
+    requestPayload[ 'message' ] = 'translate sentences'
+    requestPayload[ 'content' ] = translateMe
+    print( 'requestPayload:' )
+    print( requestPayload )
+
+    // Translate data.
+    //$.when( $.ajax( { 'url' : '/', 'type' : 'post', 'cache' : false } ) ).then( functionGoesHere( tempRequestList, removeEmptyLines) ) #handleModelsResult
+    // https://www.w3schools.com/jquery/ajax_ajax.asp
+    // https://www.w3schools.com/jquery/tryit.asp?filename=tryjquery_ajax_ajax_async
+    // $(document).ready( function() {
+    // requestDictionary = {
+    //     url: "demo_ajax_load.txt",
+    //     async: false,
+    //     success: function(result){ $( 'div' ).html( result )}
+    // }
+    // $.ajax( requestDictionary );
+    requestDictionary = {
+    url: '/',
+    type: 'post',
+    data: JSON.stringify( requestPayload ),
+    contentType: 'application/json',
+    success: function( result )
+        { unpackTranslatedResults( result, tempRequestList, removeEmptyLines=removeEmptyLines ) },
+    error: function( result ) { },
+    }
+    $.ajax( requestDictionary );
+    //returnedList = translateMe;
+
+    // Show a pretty graphic on screen while the request returns.
+    showBusySymbol()
+
+}
+
+// Interesting read.
+// https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest#converting_a_digest_to_a_hex_string
+
+function main() {
+    // Define some not-quite-global variables for intra-function data exchange.
+    // The way to make these global is to assign them to the window object as in... window.pie = pie.
+    // It probably makes sense to group them into an object and then assign them as like... window.modules.csvparser and window.__staticVariables__.pie to prevent collisions.
+    var isoCodeSearchURL='https://glottolog.org/glottolog?iso='
+    var modelDatabase = null // { }, recieved json from server
+    // These are for the 1. Search Models pane on the left.
+    var engineSearch = null // [ ], maps engines, like fairseq, ctranslate2, to every modelName using it.
+    var modelGroupSearch = null // [ ], verbatim modulePath.
+    var modelNameSearch = null // { }, engine/modelName mapping to...
+    var sourceLanguageSearch = null // { } This maps a source language, like 'ja', to a list [ ] where each entry in the list is a different modulePath/modelName.
+    var targetLanguageSearch = null // { } This maps a target language to a list [ ] where each entry in the list is a different modulePath/modelName.
+    var deviceSearch = null // { }, This maps a device to a list where each entry is a different modulePath.
+    //var lastSearch = null // engineSearch + '/' + value
+    // It should be possible to detect if the user double-clicked on Translate on accident. If no changes have been made to the translated data or request, detected via a hash match, then it was a mistake/duplicate. In that case, it is possible to do nothing client side. However, duplicate requests do not place any particular burden on the server since translation results are cached. Even with the cache optionally disabled, the model stays loaded into memory for a while by default, so subsequent requests are much faster, perhaps near instant, meaning the extra server burden for duplicate requests is minimal in practice. Since the server handles it well enough when using default or mostly default server side settings, do not implement double-click detection here.
+    //window.__modules__ = { }
+    //window.__staticVariables__ = { }
+    window.__staticVariables__.simpleAdvancedToggles = [ 
+    '#bottomBar',
+    '#search',
+    '#selectModelOptionsDiv',
+    '#requestOptions',
+    '#metadataDisplay',
+    '#searchGlotto',
+    ]
+    $( '#uiMode' ).val( 'None' )
+    uiMode = localStorage.getItem( 'uiMode' )
+    if ( uiMode != null )
+        { changeUIMode( uiMode ) }
+    else
+        { changeUIMode( 'simple' ) }
+
+    // Register events.
+    // https://www.w3schools.com/jquery/jquery_events.asp
+    //$( 'button' ).click( function(){ hidePTags() } )
+    $( '#translateButton' ).click( function() { handleTranslationRequest() } )
+    $( '#copyToClipboardButton' ).click( function() { copyTranslationToClipboard() } )
+    $( '#uiLanguage' ).change( function() { changeLanguage() } )
+    $( '#uiMode' ).change( function() { changeUIMode() } )
+    $( '#themes' ).change( function() { handleChangeTheme() } )
+    //$( '#themes' ).val( 'dark' )
+    theme = $( '#themes' ).val( 'None' ) //localStorage.getItem( 'theme' )
+
+
+    $( '#engineSearch' ).change( function() { resolveAndListEngineSearch() } )
+    $( '#modelGroupSearch' ).change( function() { resolveAndListModuleSearch() } )
+    $( '#modelNameSearch' ).change( function() { resolveAndListModelNameSearch() } )
+    $( '#modelName' ).change( function() { resolveAndListModelName() } )
+    $( '#sourceLanguageSearch' ).change( function() { resolveAndListSourceLanguageSearch() } )
+    $( '#targetLanguageSearch' ).change( function() { resolveAndListTargetLanguageSearch() } )
+    $( '#deviceSearch' ).change( function() { resolveAndListDeviceSearch() } )
+
+    // Fill bottomBar.
+    var server = location.protocol + '//' + location.hostname + ':' + location.port
+    //print( 'server: '+ server )
+    $( '#serverID' ).html( server )
+    //defaultModel = get( '/model' )
+    // This syntax is fully async, so there is no way of knowing when it will complete. The JS code will simply continue on past it and handleResult will start a completely different control flow that never returns. When it does eventually complete, it will manipulate the DOM. That is the intended shared state.
+    // https://api.jquery.com/jQuery.when
+    $.when( $.ajax( '/model' ) ).then( handleModelResult )
+
+    // Fetch mainDatabase via post. This will also update bottomBar if there is an active model and also fill in the entries at 1. Search Models.
+    $.when( $.ajax( { 'url' : '/api/v2/models', 'type' : 'post', 'cache' : false } ) ).then( handleModelsResult )
+
+    // Debug code.
+    //myString = 'wdkkawdkaw.dadw.awdaw.d.awd'
+    //pythonSplit( string, delimiter=' ', maxSplit=1 )
+    //print( pythonSplit( myString, delimiter='.' ) )
+    //print( pythonSplit( myString, delimiter='.', maxSplit=2) )
+    //print( pythonSplit( myString, '.', maxSplit=2) )
+    //print( pythonSplit( myString, '.', 3) )
+
+    $.when( $.get( 'locale/supportedLanguages.csv' ) , $.get( 'locale/supportedLanguagesStrings.csv' ) ).then( handleLocaleResponse )
+}
+
+//console.log('pie1'); 
+// Run main() when page is finished loading.
+$( function(){ main() } );
+//console.log('pie');
+</script>
+</body>
+</html>
